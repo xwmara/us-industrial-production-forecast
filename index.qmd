@@ -8,8 +8,11 @@ subtitle: "SARIMA, exponential smoothing and a VAR with consumer sentiment"
 source("R/setup.R")
 ```
 
-This site is being built. The full analysis will be split into an overview,
-the univariate models and the VAR analysis.
+This project forecasts the monthly **US Industrial Production Index**
+(1990–2025) and tests whether **consumer sentiment** helps to anticipate it. It
+compares classical time series models on a held-out test period, from data
+preparation and statistical testing to model diagnostics and forecast
+evaluation.
 
 ```{r}
 #| label: fig-ip
@@ -17,3 +20,68 @@ the univariate models and the VAR analysis.
 autoplot(ip_ts) +
   labs(x = NULL, y = "Index (2017 = 100)")
 ```
+
+## Key findings
+
+- **The series needs transforming before modelling.** Industrial production has
+  a trend, a strong seasonal pattern and two large shocks (2008–2009 and 2020).
+  Unit root tests (KPSS, ADF, Phillips-Perron) agree that it is non-stationary;
+  a log transformation, a seasonal difference and a first difference make it
+  stationary.
+- **SARIMA gives the most accurate forecasts.** Models were estimated on
+  1990–2016 and evaluated on the last 106 months (July 2016 to April 2025).
+  ARIMA(3,1,0)(0,1,1)[12] on log data has the lowest errors, ahead of the
+  seasonal naive benchmark, ETS and Holt-Winters, and the Diebold-Mariano test
+  rejects equal accuracy against ETS and Holt-Winters.
+- **Consumer sentiment adds little.** The two series are not cointegrated. In a
+  VAR(4) on first differences, sentiment one month earlier has a small positive
+  effect on industrial production, but joint Granger causality is not
+  significant at 5% (p = 0.18) and sentiment explains only about 1% of the
+  forecast error variance of production.
+
+| Model | RMSE | MAE | MAPE (%) |
+|---|---:|---:|---:|
+| SARIMA(3,1,0)(0,1,1)[12], log | **2.93** | **1.79** | **1.84** |
+| Seasonal naive (benchmark) | 3.15 | 2.26 | 2.30 |
+| ETS(M,Ad,M) | 6.93 | 6.48 | 6.45 |
+| Holt-Winters, additive | 8.25 | 7.40 | 7.38 |
+
+: Forecast accuracy on the test period (July 2016 to April 2025), in index points {#tbl-summary}
+
+**Takeaway:** for short-term forecasting of industrial production, a seasonal
+ARIMA model on log data is the most accurate of the models tested. Consumer
+sentiment plays a small role as a leading indicator.
+
+## How the analysis is organised
+
+- [**Univariate models**](univariate.qmd): visual analysis, stationarity and
+  seasonality tests, ARMA, SARIMA, ETS, Holt-Winters, a seasonal naive
+  benchmark, residual diagnostics and forecast comparison.
+- [**VAR analysis**](multivariate.qmd): consumer sentiment, Johansen
+  cointegration test, VAR, Granger causality, impulse responses, variance
+  decomposition and a 24-month forecast.
+
+## Data
+
+| Series | Description | Source |
+|---|---|---|
+| IPB50001N | Industrial Production: Total Index, 2017 = 100, not seasonally adjusted | Board of Governors of the Federal Reserve System, via FRED |
+| UMCSENT | University of Michigan: Consumer Sentiment, 1966:Q1 = 100 | Surveys of Consumers, University of Michigan, via FRED |
+
+Monthly data from January 1990 to April 2025 (424 observations), retrieved from
+ALFRED using the vintage of 17 December 2025 so that the results can be
+reproduced exactly. See the
+[data notes](https://github.com/xwmara/us-industrial-production-forecast/tree/main/data)
+for citations and terms of use.
+
+## Tools
+
+R (forecast, urca, tseries, uroot, lmtest, FinTS, vars), Quarto for the report
+and renv for package versions.
+
+## About
+
+This is a portfolio adaptation of a team project for the Time Series course at
+the Bucharest University of Economic Studies (2025). See the
+[README](https://github.com/xwmara/us-industrial-production-forecast#credits)
+for credits.
