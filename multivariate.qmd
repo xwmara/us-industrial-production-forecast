@@ -338,6 +338,79 @@ With 90% bands, about 2 of 20 horizons are expected to exclude zero by chance
 alone, so isolated significant points far from the shock should not be
 over-interpreted.
 
+### Robustness: variable ordering and cumulative effect
+
+The impulse responses above are *orthogonalised* with a Cholesky
+decomposition, which requires an ordering of the variables. With industrial
+production first, a sentiment shock cannot move production in the same month
+by construction. Below, the VAR is re-estimated with sentiment first, and the
+**cumulative** responses are computed: since the VAR is in first differences,
+the cumulative response of `IPB_d` is the effect on the *level* of the index.
+
+```{r}
+#| label: irf-robustness
+var_model_rev <- VAR(dset_diff[, c("UMCSENT_d", "IPB_d")], p = var_p, type = "const", season = 12)
+
+set.seed(123)
+irf_rev <- irf(var_model_rev, impulse = "UMCSENT_d", response = "IPB_d",
+               n.ahead = 12, boot = TRUE, ci = 0.90)
+
+cumulative_irf <- function(model) {
+  set.seed(123)
+  irf(model, impulse = "UMCSENT_d", response = "IPB_d",
+      n.ahead = 12, boot = TRUE, ci = 0.90, cumulative = TRUE)
+}
+cum_base <- cumulative_irf(var_model)
+cum_rev <- cumulative_irf(var_model_rev)
+
+# Size of a one-standard-deviation orthogonal sentiment shock, in index points
+shock_size <- function(model, var) {
+  chol_factor <- t(chol(summary(model)$covres))
+  chol_factor[var, var]
+}
+resid_corr <- summary(var_model)$corres["IPB_d", "UMCSENT_d"]
+```
+
+```{r}
+#| label: tbl-irf-robustness
+#| tbl-cap: "Response of industrial production to a sentiment shock under both orderings (90% bootstrap bands)"
+irf_row <- function(x, step, label, ordering) {
+  data.frame(
+    Ordering = ordering,
+    Measure = label,
+    Response = round(x$irf$UMCSENT_d[step + 1, 1], 3),
+    `Lower 90%` = round(x$Lower$UMCSENT_d[step + 1, 1], 3),
+    `Upper 90%` = round(x$Upper$UMCSENT_d[step + 1, 1], 3),
+    check.names = FALSE,
+    row.names = NULL
+  )
+}
+rbind(
+  irf_row(irf_umc_to_ipb, 0, "Same month", "Production first"),
+  irf_row(irf_umc_to_ipb, 1, "After 1 month", "Production first"),
+  irf_row(cum_base, 12, "Cumulative, 12 months", "Production first"),
+  irf_row(irf_rev, 0, "Same month", "Sentiment first"),
+  irf_row(irf_rev, 1, "After 1 month", "Sentiment first"),
+  irf_row(cum_rev, 12, "Cumulative, 12 months", "Sentiment first")
+)
+```
+
+1. The residuals of the two equations are only weakly correlated
+   (correlation `r round(resid_corr, 2)`), so the ordering matters little.
+   With sentiment first, the same-month response is
+   `r round(irf_rev$irf$UMCSENT_d[1, 1], 2)` and its band includes zero; the
+   response after one month
+   (`r round(irf_rev$irf$UMCSENT_d[2, 1], 2)`) remains significant.
+2. A one-standard-deviation sentiment shock (about
+   `r round(shock_size(var_model, "UMCSENT_d"), 1)` index points of sentiment)
+   raises the **level** of industrial production by
+   `r round(cum_base$irf$UMCSENT_d[13, 1], 2)` index points after 12 months
+   (90% band `r round(cum_base$Lower$UMCSENT_d[13, 1], 2)` to
+   `r round(cum_base$Upper$UMCSENT_d[13, 1], 2)`), or
+   `r round(cum_rev$irf$UMCSENT_d[13, 1], 2)` with sentiment ordered first. The
+   effect is statistically significant but economically small: the index is
+   around 100, so this is roughly half a percent.
+
 This supports the view of sentiment indicators as leading indicators of real
 industrial activity.
 
