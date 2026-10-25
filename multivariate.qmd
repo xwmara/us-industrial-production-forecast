@@ -447,6 +447,130 @@ The decomposition supports a one-sided relationship: sentiment explains a
 modest share of the forecast uncertainty of industrial production, while the
 reverse share is negligible.
 
+## Does sentiment improve forecasts out of sample?
+
+The Granger test uses the whole sample. A stricter, practical question is
+whether sentiment improves **real forecasts**. The VAR is compared with:
+
+- an **AR(12) model** for the change in industrial production with the same
+  constant and monthly dummies, i.e. the VAR equation for `IPB_d` *without*
+  the lags of sentiment. The only difference between the two models is the
+  information in consumer sentiment;
+- the **SARIMA** model from the [univariate analysis](univariate.qmd),
+  ARIMA(3,1,0)(0,1,1)[12] on log data.
+
+As in the univariate rolling-origin evaluation, every month from June 2016 to
+March 2025 the three models are re-estimated on the data available up to that
+month and forecast industrial production 1 to 12 months ahead. Forecasts of
+monthly changes are added up to give index levels.
+
+```{r}
+#| label: var-rolling-cv
+n_obs <- length(ip_ts)
+n_train <- floor(0.75 * n_obs)  # same split as the univariate analysis (June 2016)
+max_h <- 12
+
+ip_values <- as.numeric(ip_ts)
+ip_diff <- ts(diff(ip_values), start = c(1990, 2), frequency = 12)
+umc_diff <- diff(as.numeric(umc_ts))
+
+oos_errors <- list(
+  VAR = matrix(NA, n_obs, max_h),
+  `AR(12), no sentiment` = matrix(NA, n_obs, max_h),
+  SARIMA = matrix(NA, n_obs, max_h)
+)
+
+for (t in n_train:(n_obs - 1)) {
+  m <- t - 1                        # differences available at origin t
+  steps <- 1:min(max_h, n_obs - t)  # horizons with an observed outcome
+  actual <- ip_values[t + steps]
+
+  # VAR with sentiment
+  v <- VAR(data.frame(IPB_d = ip_diff[1:m], UMCSENT_d = umc_diff[1:m]),
+           p = var_p, type = "const", season = 12)
+  fc_var <- predict(v, n.ahead = max_h)$fcst$IPB_d[, "fcst"]
+
+  # Same equation without sentiment; CSS gives least-squares estimates like the VAR
+  x <- window(ip_diff, end = time(ip_diff)[m])
+  ar <- Arima(x, order = c(var_p, 0, 0), xreg = seasonaldummy(x), method = "CSS")
+  fc_ar <- forecast(ar, h = max_h, xreg = seasonaldummy(x, h = max_h))$mean
+
+  # SARIMA on log data (median forecast)
+  s <- Arima(ts(ip_values[1:t], start = c(1990, 1), frequency = 12),
+             order = c(3, 1, 0), seasonal = c(0, 1, 1), lambda = 0)
+  fc_sarima <- forecast(s, h = max_h)$mean
+
+  oos_errors$VAR[t, steps] <- actual - (ip_values[t] + cumsum(fc_var))[steps]
+  oos_errors$`AR(12), no sentiment`[t, steps] <- actual - (ip_values[t] + cumsum(as.numeric(fc_ar)))[steps]
+  oos_errors$SARIMA[t, steps] <- actual - as.numeric(fc_sarima)[steps]
+}
+
+oos_rmse <- function(E, k) sqrt(mean(E[, k]^2, na.rm = TRUE))
+```
+
+```{r}
+#| label: tbl-var-oos
+#| tbl-cap: "Rolling-origin RMSE (index points), June 2016 to April 2025"
+oos_table <- data.frame(
+  Model = names(oos_errors),
+  `1 month` = sapply(oos_errors, oos_rmse, k = 1),
+  `3 months` = sapply(oos_errors, oos_rmse, k = 3),
+  `6 months` = sapply(oos_errors, oos_rmse, k = 6),
+  `12 months` = sapply(oos_errors, oos_rmse, k = 12),
+  check.names = FALSE,
+  row.names = NULL
+)
+oos_table[, -1] <- round(oos_table[, -1], 3)
+oos_table
+```
+
+```{r}
+#| label: tbl-var-dm
+#| tbl-cap: "Diebold-Mariano tests on rolling-origin errors"
+oos_dm <- do.call(rbind, lapply(c(1, max_h), function(k) {
+  do.call(rbind, lapply(c("AR(12), no sentiment", "SARIMA"), function(other) {
+    a <- oos_errors$VAR[, k]
+    b <- oos_errors[[other]][, k]
+    ok <- !is.na(a) & !is.na(b)
+    test <- dm.test(a[ok], b[ok], alternative = "two.sided", h = k, power = 2)
+    data.frame(
+      Horizon = paste(k, if (k == 1) "month" else "months"),
+      Comparison = paste("VAR vs", other),
+      `DM statistic` = round(unname(test$statistic), 3),
+      `p-value` = round(test$p.value, 3),
+      check.names = FALSE,
+      row.names = NULL
+    )
+  }))
+}))
+rownames(oos_dm) <- NULL
+oos_dm
+
+dm_var_ar <- function(horizon) {
+  oos_dm[["p-value"]][oos_dm$Horizon == horizon & oos_dm$Comparison == "VAR vs AR(12), no sentiment"]
+}
+```
+
+1. **Adding sentiment does not improve the forecasts.** One month ahead the VAR
+   and the AR model without sentiment have practically the same RMSE
+   (`r sprintf("%.2f", oos_table[1, "1 month"])` and
+   `r sprintf("%.2f", oos_table[2, "1 month"])`; Diebold-Mariano
+   p = `r sprintf("%.2f", dm_var_ar("1 month"))`). Twelve months ahead the VAR is
+   slightly worse (`r sprintf("%.2f", oos_table[1, "12 months"])` against
+   `r sprintf("%.2f", oos_table[2, "12 months"])`), but the difference is not
+   significant (p = `r sprintf("%.2f", dm_var_ar("12 months"))`).
+2. The VAR is not more accurate than SARIMA at any of the horizons shown; at 1
+   and 12 months the differences are not statistically significant.
+
+Sentiment is a statistically significant predictor *in sample* (Granger test),
+but this does not translate into better *out-of-sample* forecasts. A likely
+reason is that estimating 12 extra sentiment coefficients adds noise that
+offsets the small amount of information they carry. This is a common result in macroeconomic
+forecasting: in-sample significance is a weak guide to forecasting value.
+
+The comparison uses the latest revised data, not the data that were available
+in real time at each forecast origin.
+
 ## VAR forecast
 
 ```{r}
