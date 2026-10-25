@@ -341,7 +341,7 @@ The model is valid for the conditional mean and is used for forecasting.
 ```{r}
 #| label: fig-sarima-forecast
 #| fig-cap: "SARIMA forecast (back-transformed to index levels) against the test data"
-sarima_forecast <- forecast(sarima_final, h = h + 36)
+sarima_forecast <- forecast(sarima_final, h = h)
 
 # Back-transform from logs with a bias correction for the mean
 sigma2 <- mean(residuals(sarima_final)^2)
@@ -364,8 +364,8 @@ autoplot(sarima_real) +
    which indicates good out-of-sample performance.
 3. The 2020 COVID-19 shock appears as a large exogenous deviation; the data
    later return to the forecast path.
-4. The uncertainty fan (2025–2028) widens asymmetrically, as expected for
-   long-horizon macroeconomic forecasts on a log scale.
+4. The uncertainty fan widens asymmetrically, as expected for long-horizon
+   forecasts on a log scale.
 
 ## Exponential smoothing (ETS)
 
@@ -391,7 +391,7 @@ information in the residuals and is inferior to SARIMA in this respect.
 ```{r}
 #| label: fig-ets-forecast
 #| fig-cap: "ETS forecast against the test data"
-ets_forecast <- forecast(ets_auto, h = h + 36)
+ets_forecast <- forecast(ets_auto, h = h)
 
 autoplot(ets_forecast) +
   autolayer(ip_test, series = "Test data") +
@@ -402,17 +402,17 @@ autoplot(ets_forecast) +
    over the test period.
 2. The damped trend stabilises the central path and prevents unrealistic
    long-run growth.
-3. The prediction intervals widen more slowly than for SARIMA: by
-   `r format(zoo::as.yearmon(time(ets_forecast$mean)[h + 36]))` the upper 95%
-   bound is `r round(tail(ets_forecast$upper[, "95%"], 1), 1)`, compared with
-   `r round(tail(sarima_real$upper[, "95%"], 1), 1)` for SARIMA.
+3. The prediction intervals widen more slowly than for SARIMA: at the end of
+   the test period (`r format(zoo::as.yearmon(time(ets_forecast$mean)[h]))`)
+   the upper 95% bound is `r round(ets_forecast$upper[h, "95%"], 1)`, compared
+   with `r round(sarima_real$upper[h, "95%"], 1)` for SARIMA.
 
 ## Holt-Winters
 
 ```{r}
 #| label: hw
-hw_add <- hw(ip_train, seasonal = "additive", h = h + 36)
-hw_mult <- hw(ip_train, seasonal = "multiplicative", h = h + 36)
+hw_add <- hw(ip_train, seasonal = "additive", h = h)
+hw_mult <- hw(ip_train, seasonal = "multiplicative", h = h)
 
 hw_lo95 <- hw_add$lower[, "95%"]
 hw_first_negative <- time(hw_lo95)[which(hw_lo95 < 0)[1]]
@@ -430,8 +430,8 @@ data.frame(
    lower AIC and a lower training RMSE.
 2. α = `r round(hw_add$model$par["alpha"], 4)` in the additive model means the
    level reacts strongly to the most recent shocks.
-3. Limitation: in the long-run forecast of the additive model, the lower 95%
-   bound falls below zero from
+3. Limitation: in the forecast of the additive model over the test period, the
+   lower 95% bound falls below zero from
    `r format(zoo::as.yearmon(hw_first_negative))`. This shows a weakness of
    classic additive structures on series in levels, compared with log-SARIMA.
 
@@ -451,7 +451,7 @@ seasonal memory of the index; in-sample it is clearly inferior to SARIMA.
 ```{r}
 #| label: fig-snaive
 #| fig-cap: "Seasonal naive forecast against the test data"
-naive_model <- snaive(ip_train, h = h + 36)
+naive_model <- snaive(ip_train, h = h)
 
 autoplot(naive_model) +
   autolayer(ip_test, series = "Test data") +
@@ -465,8 +465,8 @@ must beat.
 
 ## Model comparison
 
-Forecasts were produced for `h + 36` months; only the first `h` months are
-compared with the test data.
+Each model was estimated on the training data only and forecasts the `r h`
+months of the test period, which are compared with the actual values.
 
 ```{r}
 #| label: tbl-accuracy
@@ -538,3 +538,64 @@ around 100 index points. ETS and Holt-Winters drift downwards and underestimate
 the series, which explains their large errors. The seasonal naive forecast does
 reasonably well thanks to its flat trend but does not adapt to the dynamics of
 the series.
+
+## Forecast beyond the sample
+
+The test period is only used to evaluate the models. To forecast the future,
+the selected SARIMA specification is re-estimated on the full sample
+(January 1990 to April 2025), so the forecast uses all the available data,
+including the years after 2016.
+
+```{r}
+#| label: sarima-full
+sarima_order <- arimaorder(sarima_final)
+sarima_full <- Arima(
+  ip_log,
+  order = sarima_order[c("p", "d", "q")],
+  seasonal = sarima_order[c("P", "D", "Q")]
+)
+sarima_full
+```
+
+```{r}
+#| label: fig-future-forecast
+#| fig-cap: "SARIMA forecast for May 2025 to April 2028, estimated on the full sample"
+h_future <- 36
+future_log <- forecast(sarima_full, h = h_future)
+
+# Same back-transformation as for the test-period forecast
+bias_full <- exp(0.5 * mean(residuals(sarima_full)^2))
+
+future <- future_log
+future$mean <- bias_full * exp(future_log$mean)
+future$lower <- bias_full * exp(future_log$lower)
+future$upper <- bias_full * exp(future_log$upper)
+future$x <- exp(future_log$x)
+
+autoplot(future, include = 120) +
+  labs(title = NULL, x = "Year", y = "Index (2017 = 100)")
+```
+
+```{r}
+#| label: tbl-future-forecast
+#| tbl-cap: "SARIMA forecast at selected horizons (index points)"
+future_steps <- c(6, 12, 24, 36)
+data.frame(
+  Month = format(zoo::as.yearmon(time(future$mean)[future_steps])),
+  `Months ahead` = future_steps,
+  Forecast = round(future$mean[future_steps], 1),
+  `80% interval` = sprintf("%.1f – %.1f", future$lower[future_steps, "80%"], future$upper[future_steps, "80%"]),
+  `95% interval` = sprintf("%.1f – %.1f", future$lower[future_steps, "95%"], future$upper[future_steps, "95%"]),
+  check.names = FALSE
+)
+```
+
+Re-estimating on the full sample keeps the same model structure
+(`r as.character(sarima_full)`) but updates the coefficients with the data up
+to April 2025. The point forecast stays close to the recent level of the index,
+around `r round(mean(future$mean[1:12]), 0)` index points over the next 12
+months, while the 95% interval widens from
+±`r round((future$upper[1, "95%"] - future$lower[1, "95%"]) / 2, 1)` points one
+month ahead to about
+±`r round((future$upper[h_future, "95%"] - future$lower[h_future, "95%"]) / 2, 0)`
+points after three years.
