@@ -45,9 +45,12 @@ adf_table <- function(x) {
   )
 }
 
-# HEGY statistics and p-values by frequency
+# HEGY statistics and p-values by frequency. The test regression includes a
+# constant, a linear trend and monthly dummies (deterministic = c(1, 1, 1)), and
+# the number of augmentation lags is chosen by BIC so that its residuals are not
+# autocorrelated.
 hegy_table <- function(x) {
-  h <- hegy.test(x)
+  h <- hegy.test(x, deterministic = c(1, 1, 1), lag.method = "BIC", maxlag = 12)
   data.frame(
     Statistic = names(h$statistics),
     Value = round(h$statistics, 3),
@@ -133,17 +136,31 @@ conclusion. KPSS, ADF and PP all agree that the series is non-stationary in leve
 
 ```{r}
 #| label: tbl-hegy-level
-#| tbl-cap: "HEGY test, series in levels"
-hegy_level <- hegy_table(ip_ts)
+#| tbl-cap: "HEGY test on the log series (constant, trend and monthly dummies; lags chosen by BIC)"
+hegy_level <- hegy_table(log(ip_ts))
 hegy_level
 ```
 
-For `t_1` (zero frequency) p
-`r fmt_p(hegy_level[["p-value"]][hegy_level$Statistic == "t_1"])`, above 0.05,
-which again points to an ordinary unit root (non-stationarity in levels). For all
-seasonal frequencies (`t_2` and the F-statistics) the p-values are close to zero,
-so seasonal unit roots are rejected. To stabilise the series and prepare it for
-SARIMA, a log transformation and a seasonal difference at lag 12 are applied.
+The HEGY test checks for unit roots at the zero frequency (`t_1`, an ordinary
+stochastic trend) and at each seasonal frequency (`t_2` and the F-statistics).
+Because the series has a trend and a seasonal pattern, the test regression
+includes a constant, a trend and monthly dummies.
+
+- For `t_1`, p
+  `r fmt_p(hegy_level[["p-value"]][hegy_level$Statistic == "t_1"])` (> 0.05):
+  the zero-frequency unit root is not rejected, so the series needs a regular
+  (first) difference.
+- At all seasonal frequencies the p-values are below
+  `r ceiling(100 * max(hegy_level[["p-value"]][hegy_level$Statistic != "t_1"])) / 100`:
+  seasonal unit roots are rejected. The seasonal pattern is **deterministic**
+  (a stable pattern by month), not stochastic.
+
+Strictly, this points to a first difference with monthly dummies rather than a
+seasonal difference. The analysis below follows the usual SARIMA route with
+both a log transformation and a seasonal difference at lag 12, which is also
+what `auto.arima()` selects. Seasonally differencing a series without seasonal
+unit roots can over-difference it; this would show up as a seasonal MA
+coefficient close to −1 in the SARIMA model, which is checked below.
 
 ## Transformations
 
@@ -152,15 +169,10 @@ SARIMA, a log transformation and a seasonal difference at lag 12 are applied.
 ip_log <- log(ip_ts)
 ip_seasonal_diff <- diff(ip_log, lag = 12)
 ip_stationary <- diff(ip_seasonal_diff)
-
-hegy_sdiff <- hegy_table(ip_seasonal_diff)
-hegy_sdiff
 ```
 
-After the log transformation and the seasonal difference, all HEGY statistics,
-including `t_1`, have p-values close to zero. A first difference is then added,
-and the tests are repeated on the final series (log, seasonal difference and
-first difference):
+After the log transformation, the seasonal difference and a first difference,
+the unit root tests are repeated on the final series:
 
 ```{r}
 #| label: tbl-tests-stationary
@@ -171,7 +183,9 @@ pp_stationary <- PP.test(ip_stationary)
 adf_stationary
 ```
 
-All ADF p-values are 0.01, the smallest value `adf.test()` reports (the true
+The KPSS statistics are now far below their 5% critical values, so
+stationarity is not rejected. All ADF p-values are 0.01, the smallest value
+`adf.test()` reports (the true
 p-value is lower), and Phillips-Perron gives p `r fmt_p(pp_stationary$p.value)`.
 The unit root is strongly rejected: the transformed series is stationary.
 
@@ -282,7 +296,9 @@ data, with both a regular (d = 1) and a seasonal (D = 1) difference, as suggeste
 by the analysis above. The fit improves considerably: AIC falls to
 `r round(sarima_final$aic, 2)` (from `r round(arma_auto$aic, 2)` for ARMA).
 ar2, ar3 and the seasonal MA term sma1 are highly significant (p < 0.01); ar1 is
-kept for the consistency of the AR(3) structure.
+kept for the consistency of the AR(3) structure. The seasonal MA coefficient,
+`r round(coef(sarima_final)["sma1"], 2)`, is well away from −1, so there is no
+sign that the seasonal difference over-differences the series.
 
 ```{r}
 #| label: fig-sarima-resid
