@@ -341,25 +341,33 @@ The model is valid for the conditional mean and is used for forecasting.
 ```{r}
 #| label: fig-sarima-forecast
 #| fig-cap: "SARIMA forecast (back-transformed to index levels) against the test data"
-sarima_forecast <- forecast(sarima_final, h = h)
+# Back-transform to index levels. The same model (same coefficients) is applied
+# to the series with lambda = 0, i.e. a log transformation, so forecast()
+# returns exp() of the log forecasts: the point forecast is the median of the
+# forecast distribution and the interval bounds (quantiles) carry over exactly.
+sarima_lvl <- Arima(ip_train, model = sarima_final, lambda = 0)
+sarima_real <- forecast(sarima_lvl, h = h)
 
-# Back-transform from logs with a bias correction for the mean
-sigma2 <- mean(residuals(sarima_final)^2)
-bias_correction <- exp(0.5 * sigma2)
-
-sarima_real <- sarima_forecast
-sarima_real$mean <- bias_correction * exp(sarima_forecast$mean)
-sarima_real$lower <- bias_correction * exp(sarima_forecast$lower)
-sarima_real$upper <- bias_correction * exp(sarima_forecast$upper)
-sarima_real$x <- exp(sarima_forecast$x)
+# For comparison: the bias-adjusted mean forecast
+sarima_mean <- forecast(Arima(ip_train, model = sarima_final, lambda = 0, biasadj = TRUE), h = h)
+sarima_mean_rmse <- accuracy(sarima_mean$mean, ip_test)[1, "RMSE"]
 
 autoplot(sarima_real) +
   autolayer(ip_test, series = "Test data") +
   labs(title = NULL, x = "Year", y = "Index (2017 = 100)", colour = NULL)
 ```
 
-1. The bias correction exp(σ²/2) adjusts the back-transformed forecast for the
-   log transformation.
+1. The forecasts are made for the log of the index and converted back with
+   exp(). This gives the **median** forecast, and the prediction intervals stay
+   valid because quantiles are preserved by exp(). The **mean** forecast would
+   be higher by roughly half the forecast variance, which grows quickly with the
+   horizon: the gap is
+   `r round(sarima_mean$mean[12] - sarima_real$mean[12], 2)` index points after
+   12 months but `r round(sarima_mean$mean[h] - sarima_real$mean[h], 1)` after
+   `r h` months, and the RMSE on the test period would be
+   `r round(sarima_mean_rmse, 2)` instead of
+   `r round(accuracy(sarima_real$mean, ip_test)[1, "RMSE"], 2)`. The median is
+   used as the point forecast.
 2. The forecast (blue) follows the centre of the test data (2016–2025) closely,
    which indicates good out-of-sample performance.
 3. The 2020 COVID-19 shock appears as a large exogenous deviation; the data
@@ -550,9 +558,10 @@ including the years after 2016.
 #| label: sarima-full
 sarima_order <- arimaorder(sarima_final)
 sarima_full <- Arima(
-  ip_log,
+  ip_ts,
   order = sarima_order[c("p", "d", "q")],
-  seasonal = sarima_order[c("P", "D", "Q")]
+  seasonal = sarima_order[c("P", "D", "Q")],
+  lambda = 0  # log transformation, as for the training model
 )
 sarima_full
 ```
@@ -561,16 +570,7 @@ sarima_full
 #| label: fig-future-forecast
 #| fig-cap: "SARIMA forecast for May 2025 to April 2028, estimated on the full sample"
 h_future <- 36
-future_log <- forecast(sarima_full, h = h_future)
-
-# Same back-transformation as for the test-period forecast
-bias_full <- exp(0.5 * mean(residuals(sarima_full)^2))
-
-future <- future_log
-future$mean <- bias_full * exp(future_log$mean)
-future$lower <- bias_full * exp(future_log$lower)
-future$upper <- bias_full * exp(future_log$upper)
-future$x <- exp(future_log$x)
+future <- forecast(sarima_full, h = h_future)  # median forecast in index points
 
 autoplot(future, include = 120) +
   labs(title = NULL, x = "Year", y = "Index (2017 = 100)")
