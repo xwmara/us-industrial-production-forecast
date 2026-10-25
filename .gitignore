@@ -1,0 +1,35 @@
+# R session files
+.RData
+.Rhistory
+.Rproj.user/
+.Ruserdata
+
+# Original course materials (kept locally only)
+*.docx
+*.pptx
+serii_de_timp.R
+
+# Local assistant files
+CLAUDE.md
+.claude/
+
+# Copyrighted data that is downloaded locally, not redistributed
+data/umcsent.csv
+
+# Quarto build output (published to the gh-pages branch instead)
+_site/
+/.quarto/
+
+# renv: only renv.lock, renv/activate.R and renv/settings.json are tracked
+renv/library/
+renv/local/
+renv/cellar/
+renv/lock/
+renv/python/
+renv/sandbox/
+renv/staging/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
