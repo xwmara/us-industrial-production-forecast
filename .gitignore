@@ -33,3 +33,5 @@ renv/staging/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+**/*.quarto_ipynb

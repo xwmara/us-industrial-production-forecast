@@ -1,0 +1,17 @@
+{
+  "hash": "a5ff2b12723261c2d752b6c77e616449",
+  "result": {
+    "engine": "knitr",
+    "markdown": "---\ntitle: \"Forecasting US Industrial Production\"\nsubtitle: \"SARIMA, exponential smoothing and a VAR with consumer sentiment\"\n---\n\n\n::: {.cell}\n\n```{.r .cell-code}\nsource(\"R/setup.R\")\n```\n:::\n\n\nThis site is being built. The full analysis will be split into an overview,\nthe univariate models and the VAR analysis.\n\n\n::: {.cell}\n\n```{.r .cell-code}\nautoplot(ip_ts) +\n  labs(x = NULL, y = \"Index (2017 = 100)\")\n```\n\n::: {.cell-output-display}\n![US industrial production, total index (2017 = 100, not seasonally adjusted)](index_files/figure-html/fig-ip-1.png){#fig-ip width=768}\n:::\n:::\n\n",
+    "supporting": [
+      "index_files"
+    ],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {},
+    "preserve": {},
+    "postProcess": true
+  }
+}

@@ -1,0 +1,19 @@
+---
+title: "Forecasting US Industrial Production"
+subtitle: "SARIMA, exponential smoothing and a VAR with consumer sentiment"
+---
+
+```{r}
+#| label: setup
+source("R/setup.R")
+```
+
+This site is being built. The full analysis will be split into an overview,
+the univariate models and the VAR analysis.
+
+```{r}
+#| label: fig-ip
+#| fig-cap: "US industrial production, total index (2017 = 100, not seasonally adjusted)"
+autoplot(ip_ts) +
+  labs(x = NULL, y = "Index (2017 = 100)")
+```

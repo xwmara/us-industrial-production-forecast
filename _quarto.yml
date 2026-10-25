@@ -1,0 +1,33 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "US Industrial Production Forecast"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Overview
+    right:
+      - icon: github
+        href: https://github.com/xwmara/us-industrial-production-forecast
+        aria-label: GitHub repository
+  page-footer:
+    center: >
+      Data: Federal Reserve Board and University of Michigan, via FRED®/ALFRED®
+      (Federal Reserve Bank of St. Louis).
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: true
+    code-tools: true
+    fig-width: 8
+    fig-height: 4.5
+    df-print: kable
+
+execute:
+  freeze: auto
+  warning: false
+  message: false
