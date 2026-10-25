@@ -10,6 +10,8 @@ website:
         text: Overview
       - href: univariate.qmd
         text: Univariate models
+      - href: multivariate.qmd
+        text: VAR analysis
     right:
       - icon: github
         href: https://github.com/xwmara/us-industrial-production-forecast
