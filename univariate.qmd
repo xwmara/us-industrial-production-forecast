@@ -502,31 +502,6 @@ round(acc_table, 4)
 3. SARIMA also beats the seasonal naive benchmark
    (MAPE = `r round(acc_table["SNAIVE", "MAPE"], 2)`%).
 
-### Diebold-Mariano test
-
-```{r}
-#| label: tbl-dm
-#| tbl-cap: "Diebold-Mariano tests"
-e_sarima <- as.numeric(ip_test) - as.numeric(sarima_trim)
-e_ets <- as.numeric(ip_test) - as.numeric(ets_trim)
-e_hw <- as.numeric(ip_test) - as.numeric(hw_trim)
-
-dm_ets <- dm.test(e_sarima, e_ets, alternative = "two.sided", h = 1, power = 2)
-dm_hw <- dm.test(e_sarima, e_hw, alternative = "two.sided", h = 1, power = 2)
-
-data.frame(
-  Comparison = c("SARIMA vs ETS", "SARIMA vs Holt-Winters"),
-  `DM statistic` = round(c(dm_ets$statistic, dm_hw$statistic), 3),
-  `p-value` = c(dm_ets$p.value, dm_hw$p.value),
-  check.names = FALSE
-)
-```
-
-In both comparisons the p-value is far below 0.05, so the null hypothesis of
-equal forecast accuracy is rejected. The negative DM statistics
-(`r round(dm_ets$statistic, 3)` and `r round(dm_hw$statistic, 3)`) mean that the
-SARIMA errors are significantly smaller than those of the competing models.
-
 ```{r}
 #| label: fig-comparison
 #| fig-cap: "Forecasts over the test period"
@@ -540,12 +515,211 @@ autoplot(ip_ts, series = "Actual") +
   labs(x = "Year", y = "Index (2017 = 100)", colour = NULL)
 ```
 
-The chart is consistent with the accuracy table and the Diebold-Mariano tests.
-SARIMA follows the level and the fluctuations of the actual series closely,
-around 100 index points. ETS and Holt-Winters drift downwards and underestimate
-the series, which explains their large errors. The seasonal naive forecast does
-reasonably well thanks to its flat trend but does not adapt to the dynamics of
-the series.
+The chart is consistent with the accuracy table. SARIMA follows the level and
+the fluctuations of the actual series closely, around 100 index points. ETS and
+Holt-Winters drift downwards and underestimate the series, which explains their
+large errors. The seasonal naive forecast does reasonably well thanks to its
+flat trend but does not adapt to the dynamics of the series.
+
+This comparison rests on a **single forecast origin** (June 2016): each error
+is a forecast from 1 to `r h` months ahead, and the result depends heavily on
+where the trend of each model happened to point in mid-2016. The errors are
+also strongly autocorrelated (first-order autocorrelation of
+`r round(acc_table["SARIMA", "ACF1"], 2)` for SARIMA), so a Diebold-Mariano test
+that treats them as independent one-step errors would overstate the
+significance of the differences. A rolling-origin evaluation gives a more
+reliable comparison.
+
+## Rolling-origin evaluation
+
+Here the models are re-estimated every month of the test period on all data
+available up to that month (an expanding window) and forecast the next 1 to 12
+months, as an analyst updating the forecast every month would do. Each model
+keeps the specification selected on the training data; only its parameters are
+re-estimated. SARIMA forecasts are medians, as above.
+
+```{r}
+#| label: rolling-cv
+max_h <- 12
+sarima_order <- arimaorder(sarima_final)
+
+# Forecast functions with the specifications chosen on the training data
+ets_spec <- ets_auto$components  # error, trend, season, damped
+forecast_functions <- list(
+  SARIMA = function(x, h) {
+    forecast(Arima(x, order = sarima_order[c("p", "d", "q")],
+                   seasonal = sarima_order[c("P", "D", "Q")], lambda = 0), h = h)
+  },
+  ETS = function(x, h) {
+    forecast(ets(x, model = paste0(ets_spec[1], ets_spec[2], ets_spec[3]),
+                 damped = as.logical(ets_spec[4])), h = h)
+  },
+  `Holt-Winters` = function(x, h) hw(x, seasonal = "additive", h = h),
+  `Seasonal naive` = function(x, h) snaive(x, h = h)
+)
+
+# Row t, column k = error of the k-step forecast made with data up to month t.
+# The first origin is the end of the training sample (June 2016).
+cv_errors <- lapply(forecast_functions, function(f) {
+  tsCV(ip_ts, f, h = max_h, initial = n_train - 1)
+})
+
+# Actual value and target date of each k-step forecast, aligned with cv_errors
+n_obs <- length(ip_ts)
+target_value <- function(k) c(as.numeric(ip_ts)[-(1:k)], rep(NA, k))
+target_time <- function(k) c(as.numeric(time(ip_ts))[-(1:k)], rep(NA, k))
+
+cv_accuracy <- function(k, exclude_covid = FALSE) {
+  keep <- !is.na(target_value(k))
+  if (exclude_covid) {
+    keep <- keep & !(target_time(k) >= 2020 + 2 / 12 & target_time(k) < 2021.5)
+  }
+  t(sapply(cv_errors, function(E) {
+    e <- E[, k]
+    ok <- keep & !is.na(e)
+    c(Forecasts = sum(ok),
+      RMSE = sqrt(mean(e[ok]^2)),
+      MAE = mean(abs(e[ok])),
+      `MAPE (%)` = 100 * mean(abs(e[ok] / target_value(k)[ok])))
+  }))
+}
+
+cv_1 <- cv_accuracy(1)
+cv_12 <- cv_accuracy(12)
+```
+
+```{r}
+#| label: tbl-cv-accuracy
+#| tbl-cap: "Rolling-origin accuracy, 1 and 12 months ahead"
+cv_table <- rbind(
+  data.frame(Horizon = "1 month", Model = rownames(cv_1), round(cv_1, 3), check.names = FALSE),
+  data.frame(Horizon = "12 months", Model = rownames(cv_12), round(cv_12, 3), check.names = FALSE)
+)
+rownames(cv_table) <- NULL
+cv_table
+```
+
+```{r}
+#| label: fig-cv-rmse
+#| fig-cap: "Rolling-origin RMSE by forecast horizon"
+cv_rmse <- do.call(rbind, lapply(names(cv_errors), function(m) {
+  data.frame(
+    Model = m,
+    Horizon = 1:max_h,
+    RMSE = sapply(1:max_h, function(k) {
+      e <- cv_errors[[m]][, k]
+      sqrt(mean(e[!is.na(e) & !is.na(target_value(k))]^2))
+    })
+  )
+}))
+
+ggplot(cv_rmse, aes(Horizon, RMSE, colour = Model)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  scale_x_continuous(breaks = 1:max_h) +
+  labs(x = "Months ahead", y = "RMSE (index points)", colour = NULL)
+```
+
+```{r}
+#| label: cv-crossover
+rmse_of <- function(m) cv_rmse$RMSE[cv_rmse$Model == m]
+sarima_last_better <- max(which(rmse_of("SARIMA") < rmse_of("Seasonal naive")))
+ets_last_better <- max(which(rmse_of("ETS") < rmse_of("Seasonal naive")))
+```
+
+The errors of the statistical models grow quickly with the horizon, while the
+seasonal naive error stays almost flat. SARIMA has a lower RMSE than the
+seasonal naive forecast up to `r sarima_last_better` months ahead and ETS up to
+`r ets_last_better` months ahead; beyond that, repeating last year's values is
+more accurate on this sample.
+
+The 2020 pandemic produces a few very large errors that dominate the RMSE. As
+a robustness check, the table below excludes forecasts whose target month falls
+between March 2020 and June 2021:
+
+```{r}
+#| label: tbl-cv-no-covid
+#| tbl-cap: "Rolling-origin accuracy excluding targets from March 2020 to June 2021"
+cv_1_nc <- cv_accuracy(1, exclude_covid = TRUE)
+cv_12_nc <- cv_accuracy(12, exclude_covid = TRUE)
+cv_table_nc <- rbind(
+  data.frame(Horizon = "1 month", Model = rownames(cv_1_nc), round(cv_1_nc, 3), check.names = FALSE),
+  data.frame(Horizon = "12 months", Model = rownames(cv_12_nc), round(cv_12_nc, 3), check.names = FALSE)
+)
+rownames(cv_table_nc) <- NULL
+cv_table_nc
+```
+
+### Diebold-Mariano tests
+
+The Diebold-Mariano test compares the squared errors of SARIMA with those of
+each other model on the same forecast origins. The null hypothesis is equal
+accuracy; a negative statistic means SARIMA has smaller errors. For 12-month
+forecasts, consecutive errors overlap, and `h = 12` makes the test account for
+the resulting autocorrelation.
+
+```{r}
+#| label: tbl-dm
+#| tbl-cap: "Diebold-Mariano tests on rolling-origin errors (SARIMA vs each model)"
+dm_rows <- list()
+for (k in c(1, max_h)) {
+  for (m in setdiff(names(cv_errors), "SARIMA")) {
+    a <- cv_errors$SARIMA[, k]
+    b <- cv_errors[[m]][, k]
+    ok <- !is.na(a) & !is.na(b)
+    test <- dm.test(a[ok], b[ok], alternative = "two.sided", h = k, power = 2)
+    dm_rows[[length(dm_rows) + 1]] <- data.frame(
+      Horizon = paste(k, if (k == 1) "month" else "months"),
+      Comparison = paste("SARIMA vs", m),
+      `DM statistic` = round(unname(test$statistic), 3),
+      `p-value` = signif(test$p.value, 3),
+      check.names = FALSE
+    )
+  }
+}
+dm_table <- do.call(rbind, dm_rows)
+rownames(dm_table) <- NULL
+
+# Display copy with readable p-values
+dm_display <- dm_table
+dm_display[["p-value"]] <- ifelse(
+  dm_table[["p-value"]] < 0.001,
+  format(dm_table[["p-value"]], digits = 3, scientific = TRUE),
+  sprintf("%.3f", dm_table[["p-value"]])
+)
+dm_display
+```
+
+```{r}
+#| label: dm-values
+dm_p <- function(horizon, model) {
+  dm_table[["p-value"]][dm_table$Horizon == horizon & dm_table$Comparison == paste("SARIMA vs", model)]
+}
+```
+
+1. **One month ahead**, SARIMA, ETS and Holt-Winters are very close (RMSE of
+   `r sprintf("%.2f", cv_1["SARIMA", "RMSE"])` for SARIMA,
+   `r sprintf("%.2f", cv_1["ETS", "RMSE"])` for ETS and
+   `r sprintf("%.2f", cv_1["Holt-Winters", "RMSE"])` for Holt-Winters), and the
+   Diebold-Mariano test does not distinguish SARIMA from ETS (p `r fmt_p(dm_p("1 month", "ETS"))`) or
+   Holt-Winters (p `r fmt_p(dm_p("1 month", "Holt-Winters"))`). All three clearly
+   beat the seasonal naive benchmark (RMSE
+   `r round(cv_1["Seasonal naive", "RMSE"], 2)`; SARIMA vs seasonal naive
+   p `r fmt_p(dm_p("1 month", "Seasonal naive"))`).
+2. **Twelve months ahead**, the seasonal naive forecast has the lowest errors
+   (RMSE `r round(cv_12["Seasonal naive", "RMSE"], 2)` against
+   `r round(cv_12["SARIMA", "RMSE"], 2)` for SARIMA), but none of the
+   differences is statistically significant (all p-values above
+   `r floor(100 * min(dm_table[["p-value"]][dm_table$Horizon == "12 months"])) / 100`).
+3. Excluding the pandemic months lowers all errors substantially. One month
+   ahead the three statistical models remain almost tied, and twelve months
+   ahead the seasonal naive forecast is still the most accurate.
+
+The rolling-origin evaluation does **not** confirm the large advantage of
+SARIMA seen with a single forecast origin. At short horizons (one to a few
+months) the three statistical models perform equally well and all beat the
+seasonal naive benchmark; at a one-year horizon no model beats simply repeating
+the last year's values.
 
 ## Forecast beyond the sample
 
@@ -556,7 +730,6 @@ including the years after 2016.
 
 ```{r}
 #| label: sarima-full
-sarima_order <- arimaorder(sarima_final)
 sarima_full <- Arima(
   ip_ts,
   order = sarima_order[c("p", "d", "q")],
