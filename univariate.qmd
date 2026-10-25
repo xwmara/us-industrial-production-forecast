@@ -226,12 +226,8 @@ MAE and MAPE can be computed on it.
 ```{r}
 #| label: fig-arma-acf
 #| fig-cap: "Training part of the stationary series, ACF and PACF"
-n_stationary <- length(ip_stationary)
-n_train_stationary <- floor(0.75 * n_stationary)
-ip_stationary_train <- window(
-  ip_stationary,
-  end = time(ip_stationary)[n_train_stationary]
-)
+# Same end date as the training set (June 2016), so no test months are used
+ip_stationary_train <- window(ip_stationary, end = time(ip_train)[n_train])
 
 ggtsdisplay(ip_stationary_train)
 ```
@@ -294,7 +290,9 @@ coeftest(sarima_final)
 `auto.arima()` selects `r as.character(sarima_final)` on the log of the training
 data, with both a regular (d = 1) and a seasonal (D = 1) difference, as suggested
 by the analysis above. The fit improves considerably: AIC falls to
-`r round(sarima_final$aic, 2)` (from `r round(arma_auto$aic, 2)` for ARMA).
+`r round(sarima_final$aic, 2)` (from `r round(arma_auto$aic, 2)` for ARMA; both
+models are fitted to the same differenced training observations, so their AIC
+values are comparable).
 ar2, ar3 and the seasonal MA term sma1 are highly significant (p < 0.01); ar1 is
 kept for the consistency of the AR(3) structure. The seasonal MA coefficient,
 `r round(coef(sarima_final)["sma1"], 2)`, is well away from −1, so there is no
