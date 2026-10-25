@@ -80,16 +80,23 @@ All three tests agree: UMCSENT is not stationary in levels.
 
 ## Cointegration (Johansen test)
 
+Industrial production is not seasonally adjusted, so both the cointegration
+test and the VAR include **monthly (seasonal) dummy variables**
+(`season = 12`). Without them, the seasonal pattern ends up in the residuals
+and distorts the tests. The lag order of the levels VAR used by the Johansen
+test is chosen with the Akaike information criterion (AIC).
+
 ```{r}
 #| label: johansen
 dset <- cbind(ip_ts, umc_ts)
 colnames(dset) <- c("IPB", "UMCSENT")
 
-lag_select <- VARselect(dset, lag.max = 8, type = "const")
+lag_select <- VARselect(dset, lag.max = 12, type = "const", season = 12)
 lag_select$selection
+johansen_k <- unname(lag_select$selection["AIC(n)"])
 
-johansen_trace <- ca.jo(dset, type = "trace", ecdet = "const", K = 4)
-johansen_eigen <- ca.jo(dset, type = "eigen", ecdet = "const", K = 4)
+johansen_trace <- ca.jo(dset, type = "trace", ecdet = "const", K = johansen_k, season = 12)
+johansen_eigen <- ca.jo(dset, type = "eigen", ecdet = "const", K = johansen_k, season = 12)
 ```
 
 ```{r}
@@ -101,7 +108,7 @@ jo_trace
 jo_eigen
 ```
 
-For r = 0, both the trace statistic (`r jo_trace$Statistic[2]`) and the maximum
+With K = `r johansen_k` lags, for r = 0 both the trace statistic (`r jo_trace$Statistic[2]`) and the maximum
 eigenvalue statistic (`r jo_eigen$Statistic[2]`) are below their 5% critical
 values (`r jo_trace[["5pct"]][2]` and `r jo_eigen[["5pct"]][2]`). The null
 hypothesis r = 0 cannot be rejected: there is no cointegrating relationship, so
@@ -135,41 +142,66 @@ differencing and can be used in the VAR.
 
 ## VAR lag selection and estimation
 
+The VAR is estimated on the first differences with a constant and monthly
+dummies. The lag order should leave residuals free of autocorrelation;
+otherwise the Granger tests and the impulse response bands are not reliable.
+The table below shows the Portmanteau test for every lag order from 1 to 12.
+
 ```{r}
 #| label: var
-var_lag <- VARselect(dset_diff, lag.max = 12, type = "const")
+var_lag <- VARselect(dset_diff, lag.max = 12, type = "const", season = 12)
 var_lag$selection
-
-var_model <- VAR(dset_diff, p = 4, type = "const")
 ```
 
 ```{r}
+#| label: tbl-var-lags
+#| tbl-cap: "Portmanteau test (20 lags) on the VAR residuals, by lag order"
+lag_check <- data.frame(
+  `Lag order` = 1:12,
+  `Portmanteau p-value` = sapply(1:12, function(p) {
+    v <- VAR(dset_diff, p = p, type = "const", season = 12)
+    serial.test(v, lags.pt = 20, type = "PT.asymptotic")$serial$p.value
+  }),
+  check.names = FALSE
+)
+lag_check[["Portmanteau p-value"]] <- round(lag_check[["Portmanteau p-value"]], 4)
+lag_check
+
+var_p <- unname(var_lag$selection["AIC(n)"])
+var_model <- VAR(dset_diff, p = var_p, type = "const", season = 12)
+```
+
+The Schwarz and Hannan-Quinn criteria choose `r var_lag$selection["SC(n)"]`
+lags, but with fewer than 12 lags the residuals remain autocorrelated at the 5%
+level. The AIC choice, p = `r var_p`, removes the autocorrelation and is used
+below. Twelve lags of monthly data cover one full year, which is plausible for a
+non-seasonally adjusted series.
+
+```{r}
 #| label: tbl-var-ipb
-#| tbl-cap: "VAR(4), equation for the change in industrial production (IPB_d)"
+#| tbl-cap: "Equation for the change in industrial production (IPB_d): lags of UMCSENT_d"
 var_summary <- summary(var_model)
 ipb_eq <- var_summary$varresult$IPB_d$coefficients
 umc_eq <- var_summary$varresult$UMCSENT_d$coefficients
-round(ipb_eq, 4)
+as.data.frame(round(ipb_eq[grep("^UMCSENT_d", rownames(ipb_eq)), ], 4))
 ```
 
 ```{r}
 #| label: tbl-var-umc
-#| tbl-cap: "VAR(4), equation for the change in consumer sentiment (UMCSENT_d): lags of IPB_d"
-round(umc_eq[grep("^IPB_d", rownames(umc_eq)), ], 4)
+#| tbl-cap: "Equation for the change in consumer sentiment (UMCSENT_d): lags of IPB_d"
+umc_on_ipb <- umc_eq[grep("^IPB_d", rownames(umc_eq)), ]
+n_sig_ipb_lags <- sum(umc_on_ipb[, "Pr(>|t|)"] < 0.05)
+as.data.frame(round(umc_on_ipb, 4))
 ```
 
-1. The information criteria suggest 12 lags; p = 4 is used to keep the model
-   parsimonious and easy to interpret.
-2. In the industrial production equation, sentiment one month earlier
+1. In the industrial production equation, sentiment one month earlier
    (`UMCSENT_d.l1`) has a positive coefficient
-   (`r round(ipb_eq["UMCSENT_d.l1", "Estimate"], 3)`) that is significant at 5%
+   (`r round(ipb_eq["UMCSENT_d.l1", "Estimate"], 3)`) that is highly significant
    (p `r fmt_p(ipb_eq["UMCSENT_d.l1", "Pr(>|t|)"])`): an improvement in consumer
    confidence is followed by higher industrial production the next month.
-3. In the sentiment equation, none of the lags of industrial production is
-   significant.
-
-The VAR(4) suggests a one-directional short-run relationship, from consumer
-sentiment to industrial production.
+2. In the sentiment equation, only `r n_sig_ipb_lags` of the `r var_p` lags of
+   industrial production `r if (n_sig_ipb_lags == 1) "is" else "are"`
+   significant at 5%, about what chance alone would produce.
 
 ## VAR diagnostics
 
@@ -179,13 +211,14 @@ var_serial <- serial.test(var_model, lags.pt = 20, type = "PT.asymptotic")
 var_arch <- vars::arch.test(var_model, lags.multi = 12, multivariate.only = TRUE)
 var_norm <- normality.test(var_model, multivariate.only = TRUE)
 
+diag_p <- c(
+  var_serial$serial$p.value,
+  var_arch$arch.mul$p.value,
+  var_norm$jb.mul$JB$p.value
+)
 data.frame(
   Test = c("Portmanteau (autocorrelation, 20 lags)", "Multivariate ARCH (12 lags)", "Jarque-Bera (normality)"),
-  `p-value` = signif(c(
-    var_serial$serial$p.value,
-    var_arch$arch.mul$p.value,
-    var_norm$jb.mul$JB$p.value
-  ), 3),
+  `p-value` = sub("^= ", "", sapply(diag_p, fmt_p)),
   check.names = FALSE
 )
 ```
@@ -198,18 +231,24 @@ stability_model <- stability(var_model, type = "OLS-CUSUM")
 plot(stability_model)
 ```
 
-The diagnostic tests all give p < 0.05, indicating residual autocorrelation,
-ARCH effects and non-normality, which reflect the macroeconomic shocks of
-1990–2025. In the OLS-CUSUM plot, the empirical fluctuation process stays
-within the critical bands for both equations, so the parameters of the VAR(4)
-are stable over the sample. The model is used for the causality analysis and the
-forecast below.
+1. **Autocorrelation:** the Portmanteau test gives
+   p `r fmt_p(var_serial$serial$p.value)`, so the residuals show no remaining
+   autocorrelation.
+2. **ARCH effects and non-normality:** both tests give p < 0.05. The residual
+   variance changes over time and the distribution has heavy tails, reflecting
+   the 2008–2009 and 2020 shocks. The coefficient estimates remain consistent,
+   but standard errors and p-values rely on large-sample approximations and
+   should be read with some caution.
+3. **Stability:** in the OLS-CUSUM plot, the empirical fluctuation process stays
+   within the critical bands for both equations, so there is no evidence of a
+   structural break in the parameters. This is a separate property: it does not
+   compensate for the ARCH effects above.
 
 ## Granger causality
 
 ```{r}
 #| label: tbl-granger
-#| tbl-cap: "Granger causality tests (F-tests on all four lags)"
+#| tbl-cap: "Granger causality tests (F-tests on all lags of the causing variable)"
 granger_ipb <- causality(var_model, cause = "IPB_d")
 granger_umc <- causality(var_model, cause = "UMCSENT_d")
 
@@ -223,15 +262,21 @@ data.frame(
 
 1. IPB_d → UMCSENT_d: p `r fmt_p(granger_ipb$Granger$p.value)` (> 0.05); changes
    in industrial production do not help predict consumer sentiment.
-2. UMCSENT_d → IPB_d: the joint p-value for the four lags is
-   `r round(granger_umc$Granger$p.value, 4)` (> 0.05), so at the 5% level the
-   null hypothesis of no Granger causality cannot be rejected.
-3. The first lag of sentiment was individually significant in the VAR, but the
-   Granger test evaluates all four lags together, and lags 2–4 are not
-   significant, which weakens the joint F-test.
+2. UMCSENT_d → IPB_d: the joint p-value for the `r var_p` lags is
+   `r round(granger_umc$Granger$p.value, 4)` (< 0.05), so the null hypothesis of
+   no Granger causality is rejected: past changes in consumer sentiment help
+   predict changes in industrial production.
 
-The information link between the two variables appears only at a very short
-horizon (one month) and fades over a four-month window.
+The relationship is one-directional: sentiment helps to predict industrial
+production, but not the other way round. Granger causality is about
+predictive content, not about economic causation.
+
+::: {.callout-note}
+In an earlier version of this analysis, the VAR had 4 lags and no seasonal
+dummies; its residuals were autocorrelated and the Granger test for
+UMCSENT_d → IPB_d was not significant (p = 0.18). Accounting for seasonality
+and choosing the lag order so that the residuals are clean changes this result.
+:::
 
 ## Impulse response functions
 
@@ -264,13 +309,34 @@ irf_ipb_to_umc <- irf(
 plot(irf_ipb_to_umc, main = "Shock to IPB_d, response of UMCSENT_d")
 ```
 
-1. A positive shock to consumer sentiment raises industrial production in the
-   following month, and the effect is statistically significant (the bootstrap
-   band is entirely above zero). The effect is temporary and dies out after
-   about five months.
-2. For a shock to industrial production, the zero line stays inside the
-   confidence band: production shocks have no significant effect on consumer
-   confidence.
+```{r}
+#| label: irf-significance
+# Horizons (months after the shock) at which the 90% band excludes zero
+significant_horizons <- function(x, impulse) {
+  which(x$Lower[[impulse]][, 1] > 0 | x$Upper[[impulse]][, 1] < 0) - 1
+}
+and_list <- function(x) {
+  if (length(x) == 0) return("at no horizon")
+  if (length(x) == 1) return(as.character(x))
+  paste(paste(head(x, -1), collapse = ", "), "and", tail(x, 1))
+}
+sig_umc_to_ipb <- significant_horizons(irf_umc_to_ipb, "UMCSENT_d")
+sig_ipb_to_umc <- significant_horizons(irf_ipb_to_umc, "IPB_d")
+```
+
+1. A positive shock to consumer sentiment raises industrial production one
+   month later (response of
+   `r round(irf_umc_to_ipb$irf$UMCSENT_d[2, 1], 2)` index points, with the
+   bootstrap band entirely above zero). Over the 20 months shown, the band
+   excludes zero only `r and_list(sig_umc_to_ipb)` months after the shock, so
+   the effect is concentrated in the first month and is short-lived.
+2. For a shock to industrial production, the band excludes zero only
+   `r and_list(sig_ipb_to_umc)` months after the shock: production shocks have
+   essentially no effect on consumer confidence.
+
+With 90% bands, about 2 of 20 horizons are expected to exclude zero by chance
+alone, so isolated significant points far from the shock should not be
+over-interpreted.
 
 This supports the view of sentiment indicators as leading indicators of real
 industrial activity.
@@ -292,7 +358,7 @@ fevd_10 <- rbind(
   IPB_d = fevd_result$IPB_d[10, ],
   UMCSENT_d = fevd_result$UMCSENT_d[10, ]
 )
-round(100 * fevd_10, 2)
+as.data.frame(round(100 * fevd_10, 2))
 ```
 
 1. In the first month, almost 100% of the variance of each variable is
@@ -304,8 +370,9 @@ round(100 * fevd_10, 2)
    `r round(100 * fevd_10["UMCSENT_d", "IPB_d"], 2)`% of the variance of
    consumer sentiment.
 
-The decomposition supports a one-sided, short-run relationship: sentiment plays
-a small but stable role as a leading indicator for industry.
+The decomposition supports a one-sided relationship: sentiment explains a
+modest share of the forecast uncertainty of industrial production, while the
+reverse share is negligible.
 
 ## VAR forecast
 
@@ -340,6 +407,7 @@ ggplot(df_ipb, aes(x = time, y = value)) +
    changes.
 3. They are converted back to index levels with `cumsum()`, adding the forecast
    changes to the last observed value (`r round(last_ipb, 2)`).
-4. To the right of the dashed red line, industrial production grows steadily and
-   moderately, to `r round(tail(fc_ipb_level, 1), 2)` after 24 months, supported
-   by the positive impulse from consumer sentiment.
+4. To the right of the dashed red line, the forecast reproduces the seasonal
+   pattern through the monthly dummies. On average it stays around
+   `r round(mean(fc_ipb_level), 1)` index points over the 24 months and ends at
+   `r round(tail(fc_ipb_level, 1), 2)`, close to the recent level of the series.
