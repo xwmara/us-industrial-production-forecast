@@ -1,0 +1,540 @@
+---
+title: "Univariate models"
+subtitle: "Stationarity, ARMA, SARIMA, ETS, Holt-Winters and a seasonal naive benchmark"
+---
+
+```{r}
+#| label: setup
+source("R/setup.R")
+
+suppressPackageStartupMessages({
+  library(tseries)  # adf.test, jarque.bera.test
+  library(urca)     # ur.kpss
+  library(uroot)    # hegy.test
+  library(lmtest)   # coeftest
+  library(FinTS)    # ArchTest
+})
+
+# Format a p-value for the text, including the relation sign ("= 0.0100", "< 2.2e-16")
+fmt_p <- function(p) {
+  if (p < 2.2e-16) return("< 2.2e-16")
+  if (p < 0.001) return(paste("=", format(p, digits = 3, scientific = TRUE)))
+  paste("=", sprintf("%.4f", p))
+}
+
+# KPSS statistics with the 5% critical value
+kpss_table <- function(x) {
+  do.call(rbind, lapply(c("tau", "mu"), function(type) {
+    t <- ur.kpss(x, type = type)
+    data.frame(
+      Specification = if (type == "tau") "Trend (tau)" else "Constant (mu)",
+      Statistic = round(t@teststat, 4),
+      `Critical value 5%` = t@cval[, "5pct"],
+      check.names = FALSE
+    )
+  }))
+}
+
+# ADF p-values for several lag orders (tseries reports p-values within [0.01, 0.99])
+adf_lags <- c(1, 2, 3, 4, 5, 12, 24)
+adf_table <- function(x) {
+  data.frame(
+    Lag = adf_lags,
+    `p-value` = sapply(adf_lags, function(k) suppressWarnings(adf.test(x, k = k)$p.value)),
+    check.names = FALSE
+  )
+}
+
+# HEGY statistics and p-values by frequency
+hegy_table <- function(x) {
+  h <- hegy.test(x)
+  data.frame(
+    Statistic = names(h$statistics),
+    Value = round(h$statistics, 3),
+    `p-value` = round(h$pvalues, 4),
+    check.names = FALSE,
+    row.names = NULL
+  )
+}
+```
+
+The series is the US Industrial Production Total Index (IPB50001N, 2017 = 100,
+not seasonally adjusted), monthly from January 1990 to April 2025
+(`r length(ip_ts)` observations).
+
+## Visual analysis
+
+```{r}
+#| label: fig-ip-level
+#| fig-cap: "US industrial production, total index"
+autoplot(ip_ts) +
+  labs(x = "Year", y = "Index (2017 = 100)")
+```
+
+The series has a strong upward trend between 1990 and 2008, so its mean is not
+constant, which is a first sign of non-stationarity. Two major shocks stand out:
+the collapse during the 2008–2009 financial crisis and the very sharp but
+short-lived drop during the COVID-19 pandemic in 2020. The trend and the level
+shifts call for formal unit root testing.
+
+```{r}
+#| label: fig-ip-acf
+#| fig-cap: "Series, ACF and PACF in levels"
+ggtsdisplay(ip_ts)
+```
+
+The ACF decays very slowly and almost linearly, staying far above the
+significance bands: the classic pattern of a non-stationary (unit root) process.
+The PACF has a large spike at lag 1 and significant spikes at the seasonal lags
+12 and 24. Visually, the series needs both a regular difference (for the trend)
+and a seasonal difference at lag 12.
+
+```{r}
+#| label: fig-subseries
+#| fig-cap: "Seasonal subseries: one panel per month, blue line = monthly mean"
+ggsubseriesplot(ip_ts) +
+  labs(x = NULL, y = "Index (2017 = 100)")
+```
+
+The monthly means differ: June and August have the highest average production,
+while April and July are lower. Unequal monthly means are visual evidence of a
+seasonal component, which motivates the HEGY test for seasonal unit roots.
+
+## Stationarity tests in levels
+
+**KPSS** (null hypothesis: the series is stationary):
+
+```{r}
+#| label: tbl-kpss-level
+#| tbl-cap: "KPSS test, series in levels"
+kpss_level <- kpss_table(ip_ts)
+kpss_level
+```
+
+In both specifications the statistic is far above the 5% critical value, so
+stationarity is rejected: the original series is non-stationary.
+
+**ADF** (null hypothesis: unit root) for several lag orders, and
+**Phillips-Perron**:
+
+```{r}
+#| label: tbl-adf-level
+#| tbl-cap: "ADF p-values by lag order, series in levels"
+adf_level <- adf_table(ip_ts)
+pp_level <- PP.test(ip_ts)
+adf_level
+```
+
+All ADF p-values are well above 0.05, so the unit root cannot be rejected. The
+Phillips-Perron test gives p `r fmt_p(pp_level$p.value)` and leads to the same
+conclusion. KPSS, ADF and PP all agree that the series is non-stationary in levels.
+
+## Seasonality test (HEGY)
+
+```{r}
+#| label: tbl-hegy-level
+#| tbl-cap: "HEGY test, series in levels"
+hegy_level <- hegy_table(ip_ts)
+hegy_level
+```
+
+For `t_1` (zero frequency) p
+`r fmt_p(hegy_level[["p-value"]][hegy_level$Statistic == "t_1"])`, above 0.05,
+which again points to an ordinary unit root (non-stationarity in levels). For all
+seasonal frequencies (`t_2` and the F-statistics) the p-values are close to zero,
+so seasonal unit roots are rejected. To stabilise the series and prepare it for
+SARIMA, a log transformation and a seasonal difference at lag 12 are applied.
+
+## Transformations
+
+```{r}
+#| label: transform
+ip_log <- log(ip_ts)
+ip_seasonal_diff <- diff(ip_log, lag = 12)
+ip_stationary <- diff(ip_seasonal_diff)
+
+hegy_sdiff <- hegy_table(ip_seasonal_diff)
+hegy_sdiff
+```
+
+After the log transformation and the seasonal difference, all HEGY statistics,
+including `t_1`, have p-values close to zero. A first difference is then added,
+and the tests are repeated on the final series (log, seasonal difference and
+first difference):
+
+```{r}
+#| label: tbl-tests-stationary
+#| tbl-cap: "KPSS and ADF tests, stationary series"
+kpss_table(ip_stationary)
+adf_stationary <- adf_table(ip_stationary)
+pp_stationary <- PP.test(ip_stationary)
+adf_stationary
+```
+
+All ADF p-values are 0.01, the smallest value `adf.test()` reports (the true
+p-value is lower), and Phillips-Perron gives p `r fmt_p(pp_stationary$p.value)`.
+The unit root is strongly rejected: the transformed series is stationary.
+
+```{r}
+#| label: fig-stationary
+#| fig-cap: "Stationary series: log, seasonal difference and first difference"
+autoplot(ip_stationary) +
+  labs(x = "Year", y = NULL)
+```
+
+The transformed series no longer trends and fluctuates around zero. Higher
+volatility in 2008 and 2020 reflects the crisis episodes, but mean reversion is
+now clear.
+
+## Train / test split
+
+```{r}
+#| label: split
+n_total <- length(ip_ts)
+n_train <- floor(0.75 * n_total)
+
+ip_train <- window(ip_ts, end = time(ip_ts)[n_train])
+ip_test <- window(ip_ts, start = time(ip_ts)[n_train + 1])
+ip_train_log <- window(ip_log, end = time(ip_log)[n_train])
+
+h <- length(ip_test)
+```
+
+The first 75% of the sample (`r n_train` months, to
+`r format(zoo::as.yearmon(time(ip_train)[n_train]))`) is used to estimate the
+models; the last `r h` months (`r format(zoo::as.yearmon(time(ip_test)[1]))`
+to `r format(zoo::as.yearmon(time(ip_test)[h]))`) are kept for out-of-sample
+evaluation. The forecast horizon `h` equals the length of the test set, so RMSE,
+MAE and MAPE can be computed on it.
+
+## ARMA models on the stationary series
+
+```{r}
+#| label: fig-arma-acf
+#| fig-cap: "Training part of the stationary series, ACF and PACF"
+n_stationary <- length(ip_stationary)
+n_train_stationary <- floor(0.75 * n_stationary)
+ip_stationary_train <- window(
+  ip_stationary,
+  end = time(ip_stationary)[n_train_stationary]
+)
+
+ggtsdisplay(ip_stationary_train)
+```
+
+Short lags (1–4) are significant in both the ACF and PACF, which points to
+short-run AR and MA components. There are also large negative spikes at the
+seasonal lags 12 and 24, so a non-seasonal ARMA model will struggle to remove
+the autocorrelation at long lags. This is why several models are estimated and
+why SARIMA follows.
+
+```{r}
+#| label: tbl-arma
+#| tbl-cap: "Candidate ARMA models on the stationary training series"
+arma_orders <- list(c(1, 0, 0), c(0, 0, 1), c(1, 0, 1), c(1, 0, 2), c(2, 0, 1))
+arma_models <- lapply(arma_orders, function(o) Arima(ip_stationary_train, order = o))
+arma_auto <- auto.arima(ip_stationary_train, seasonal = FALSE)
+
+arma_compare <- data.frame(
+  Model = c(sapply(arma_orders, function(o) sprintf("ARMA(%d,%d)", o[1], o[3])), "auto.arima"),
+  Specification = c(sapply(arma_models, function(m) as.character(m)), as.character(arma_auto)),
+  AIC = round(c(sapply(arma_models, AIC), AIC(arma_auto)), 2),
+  BIC = round(c(sapply(arma_models, BIC), BIC(arma_auto)), 2)
+)
+arma_compare
+
+coeftest(arma_auto)
+```
+
+`auto.arima()` selects `r as.character(arma_auto)` with AIC = `r round(arma_auto$aic, 2)`
+and BIC = `r round(arma_auto$bic, 2)`, the lowest values among the candidates.
+The coefficients ar2, ma2 and ma3 are significant at 1% and ma1 at 5%; ar1 is
+not significant on its own but is kept to preserve the AR(2) structure.
+
+```{r}
+#| label: fig-arma-resid
+#| fig-cap: "Residual diagnostics, ARMA model"
+arma_lb <- checkresiduals(arma_auto)
+```
+
+The Ljung-Box test gives p `r fmt_p(arma_lb$p.value)` (< 0.05), so the null
+hypothesis of independent residuals is rejected: the residuals are not white
+noise. The ACF confirms remaining autocorrelation at the seasonal lags 12 and 24.
+A non-seasonal ARMA model cannot capture the full dynamics of the series, which
+justifies moving to SARIMA.
+
+## SARIMA
+
+```{r}
+#| label: sarima
+sarima_final <- auto.arima(
+  ip_train_log,
+  seasonal = TRUE,
+  stepwise = FALSE,
+  approximation = FALSE
+)
+sarima_final
+coeftest(sarima_final)
+```
+
+`auto.arima()` selects `r as.character(sarima_final)` on the log of the training
+data, with both a regular (d = 1) and a seasonal (D = 1) difference, as suggested
+by the analysis above. The fit improves considerably: AIC falls to
+`r round(sarima_final$aic, 2)` (from `r round(arma_auto$aic, 2)` for ARMA).
+ar2, ar3 and the seasonal MA term sma1 are highly significant (p < 0.01); ar1 is
+kept for the consistency of the AR(3) structure.
+
+```{r}
+#| label: fig-sarima-resid
+#| fig-cap: "Residual diagnostics, SARIMA model"
+sarima_lb <- checkresiduals(sarima_final)
+```
+
+The Ljung-Box test gives p `r fmt_p(sarima_lb$p.value)` (> 0.05): the residuals
+show no autocorrelation and behave like white noise. The seasonal MA term
+removed the correlation at lags 12 and 24, and the histogram is roughly
+symmetric.
+
+### Further residual tests
+
+```{r}
+#| label: tbl-sarima-tests
+#| tbl-cap: "Ljung-Box and ARCH tests on the SARIMA residuals"
+sarima_resid <- residuals(sarima_final)
+
+lb_lags <- c(1:5, 8, 12, 24)
+sarima_lb_table <- data.frame(
+  Lag = lb_lags,
+  `Ljung-Box p-value` = sapply(lb_lags, function(l) {
+    Box.test(sarima_resid, lag = l, type = "Ljung-Box")$p.value
+  }),
+  check.names = FALSE
+)
+
+arch_lags <- c(1, 2, 4, 8, 12)
+sarima_arch_table <- data.frame(
+  Lag = arch_lags,
+  `ARCH p-value` = sapply(arch_lags, function(l) ArchTest(sarima_resid, lags = l)$p.value),
+  check.names = FALSE
+)
+
+sarima_jb <- jarque.bera.test(sarima_resid)
+
+sarima_lb_table
+sarima_arch_table
+```
+
+1. **Autocorrelation (Ljung-Box):** all p-values are high (minimum
+   `r round(min(sarima_lb_table[[2]]), 3)`), so the residuals are independent
+   and the dynamics have been captured.
+2. **Normality (Jarque-Bera):** p `r fmt_p(sarima_jb$p.value)` (< 0.05), so
+   normality is rejected. This is explained by turning points and major shocks
+   (the 2008 crisis and the 2020 COVID-19 shock).
+3. **Heteroscedasticity (ARCH):** p-values below 0.05 show ARCH effects
+   (volatility clustering): the error variance is not constant, with larger
+   residuals during episodes of macroeconomic instability.
+
+The model is valid for the conditional mean and is used for forecasting.
+
+### SARIMA forecast
+
+```{r}
+#| label: fig-sarima-forecast
+#| fig-cap: "SARIMA forecast (back-transformed to index levels) against the test data"
+sarima_forecast <- forecast(sarima_final, h = h + 36)
+
+# Back-transform from logs with a bias correction for the mean
+sigma2 <- mean(residuals(sarima_final)^2)
+bias_correction <- exp(0.5 * sigma2)
+
+sarima_real <- sarima_forecast
+sarima_real$mean <- bias_correction * exp(sarima_forecast$mean)
+sarima_real$lower <- bias_correction * exp(sarima_forecast$lower)
+sarima_real$upper <- bias_correction * exp(sarima_forecast$upper)
+sarima_real$x <- exp(sarima_forecast$x)
+
+autoplot(sarima_real) +
+  autolayer(ip_test, series = "Test data") +
+  labs(title = NULL, x = "Year", y = "Index (2017 = 100)", colour = NULL)
+```
+
+1. The bias correction exp(σ²/2) adjusts the back-transformed forecast for the
+   log transformation.
+2. The forecast (blue) follows the centre of the test data (2016–2025) closely,
+   which indicates good out-of-sample performance.
+3. The 2020 COVID-19 shock appears as a large exogenous deviation; the data
+   later return to the forecast path.
+4. The uncertainty fan (2025–2028) widens asymmetrically, as expected for
+   long-horizon macroeconomic forecasts on a log scale.
+
+## Exponential smoothing (ETS)
+
+```{r}
+#| label: ets
+ets_auto <- ets(ip_train, model = "ZZZ")
+ets_auto
+```
+
+```{r}
+#| label: fig-ets-resid
+#| fig-cap: "Residual diagnostics, ETS model"
+ets_lb <- checkresiduals(ets_auto)
+```
+
+The automatic selection gives `r ets_auto$method`: multiplicative errors, an
+additive damped trend (φ = `r round(ets_auto$par["phi"], 4)`) and multiplicative
+seasonality. The Ljung-Box test gives p `r fmt_p(ets_lb$p.value)` (< 0.05),
+so the residuals are not white noise, and the ACF shows remaining
+autocorrelation at short and seasonal lags (12, 24). In-sample, ETS leaves
+information in the residuals and is inferior to SARIMA in this respect.
+
+```{r}
+#| label: fig-ets-forecast
+#| fig-cap: "ETS forecast against the test data"
+ets_forecast <- forecast(ets_auto, h = h + 36)
+
+autoplot(ets_forecast) +
+  autolayer(ip_test, series = "Test data") +
+  labs(title = NULL, x = "Year", y = "Index (2017 = 100)", colour = NULL)
+```
+
+1. ETS reproduces the seasonal pattern but slightly underestimates the level
+   over the test period.
+2. The damped trend stabilises the central path and prevents unrealistic
+   long-run growth.
+3. The prediction intervals widen more slowly than for SARIMA: by
+   `r format(zoo::as.yearmon(time(ets_forecast$mean)[h + 36]))` the upper 95%
+   bound is `r round(tail(ets_forecast$upper[, "95%"], 1), 1)`, compared with
+   `r round(tail(sarima_real$upper[, "95%"], 1), 1)` for SARIMA.
+
+## Holt-Winters
+
+```{r}
+#| label: hw
+hw_add <- hw(ip_train, seasonal = "additive", h = h + 36)
+hw_mult <- hw(ip_train, seasonal = "multiplicative", h = h + 36)
+
+hw_lo95 <- hw_add$lower[, "95%"]
+hw_first_negative <- time(hw_lo95)[which(hw_lo95 < 0)[1]]
+
+data.frame(
+  Model = c("Additive", "Multiplicative"),
+  AIC = round(c(hw_add$model$aic, hw_mult$model$aic), 2),
+  `RMSE (train)` = round(c(accuracy(hw_add)[, "RMSE"], accuracy(hw_mult)[, "RMSE"]), 4),
+  alpha = round(c(hw_add$model$par["alpha"], hw_mult$model$par["alpha"]), 4),
+  check.names = FALSE
+)
+```
+
+1. The additive model fits better in-sample than the multiplicative one, with a
+   lower AIC and a lower training RMSE.
+2. α = `r round(hw_add$model$par["alpha"], 4)` in the additive model means the
+   level reacts strongly to the most recent shocks.
+3. Limitation: in the long-run forecast of the additive model, the lower 95%
+   bound falls below zero from
+   `r format(zoo::as.yearmon(hw_first_negative))`. This shows a weakness of
+   classic additive structures on series in levels, compared with log-SARIMA.
+
+```{r}
+#| label: fig-hw-resid
+#| fig-cap: "Residual diagnostics, additive Holt-Winters"
+hw_lb <- checkresiduals(hw_add)
+```
+
+The Ljung-Box test gives p `r fmt_p(hw_lb$p.value)` (< 0.05): the residuals are
+not white noise, with large dependencies at the seasonal lags (12, 24, 36).
+Holt-Winters makes the seasonal component too rigid and does not remove the
+seasonal memory of the index; in-sample it is clearly inferior to SARIMA.
+
+## Seasonal naive benchmark
+
+```{r}
+#| label: fig-snaive
+#| fig-cap: "Seasonal naive forecast against the test data"
+naive_model <- snaive(ip_train, h = h + 36)
+
+autoplot(naive_model) +
+  autolayer(ip_test, series = "Test data") +
+  labs(title = NULL, x = "Year", y = "Index (2017 = 100)", colour = NULL)
+```
+
+The seasonal naive forecast repeats the last observed seasonal cycle with a flat
+trend. It captures the monthly pattern but cannot adapt to changes in the trend,
+and its intervals are wide. It is the basic benchmark that more complex models
+must beat.
+
+## Model comparison
+
+Forecasts were produced for `h + 36` months; only the first `h` months are
+compared with the test data.
+
+```{r}
+#| label: tbl-accuracy
+#| tbl-cap: "Forecast accuracy on the test set (Jul 2016 to Apr 2025)"
+sarima_trim <- sarima_real$mean[1:h]
+ets_trim <- ets_forecast$mean[1:h]
+hw_trim <- hw_add$mean[1:h]
+naive_trim <- naive_model$mean[1:h]
+
+acc_table <- rbind(
+  SARIMA = accuracy(sarima_trim, ip_test)[1, ],
+  ETS = accuracy(ets_trim, ip_test)[1, ],
+  HOLT_WINTERS = accuracy(hw_trim, ip_test)[1, ],
+  SNAIVE = accuracy(naive_trim, ip_test)[1, ]
+)
+
+round(acc_table, 4)
+```
+
+1. SARIMA has the smallest errors: RMSE = `r round(acc_table["SARIMA", "RMSE"], 4)`
+   and MAPE = `r round(acc_table["SARIMA", "MAPE"], 2)`%.
+2. ETS (MAPE = `r round(acc_table["ETS", "MAPE"], 2)`%) and Holt-Winters
+   (MAPE = `r round(acc_table["HOLT_WINTERS", "MAPE"], 2)`%) systematically
+   underestimate the test data.
+3. SARIMA also beats the seasonal naive benchmark
+   (MAPE = `r round(acc_table["SNAIVE", "MAPE"], 2)`%).
+
+### Diebold-Mariano test
+
+```{r}
+#| label: tbl-dm
+#| tbl-cap: "Diebold-Mariano tests"
+e_sarima <- as.numeric(ip_test) - as.numeric(sarima_trim)
+e_ets <- as.numeric(ip_test) - as.numeric(ets_trim)
+e_hw <- as.numeric(ip_test) - as.numeric(hw_trim)
+
+dm_ets <- dm.test(e_sarima, e_ets, alternative = "two.sided", h = 1, power = 2)
+dm_hw <- dm.test(e_sarima, e_hw, alternative = "two.sided", h = 1, power = 2)
+
+data.frame(
+  Comparison = c("SARIMA vs ETS", "SARIMA vs Holt-Winters"),
+  `DM statistic` = round(c(dm_ets$statistic, dm_hw$statistic), 3),
+  `p-value` = c(dm_ets$p.value, dm_hw$p.value),
+  check.names = FALSE
+)
+```
+
+In both comparisons the p-value is far below 0.05, so the null hypothesis of
+equal forecast accuracy is rejected. The negative DM statistics
+(`r round(dm_ets$statistic, 3)` and `r round(dm_hw$statistic, 3)`) mean that the
+SARIMA errors are significantly smaller than those of the competing models.
+
+```{r}
+#| label: fig-comparison
+#| fig-cap: "Forecasts over the test period"
+to_test_ts <- function(x) ts(x[1:h], start = start(ip_test), frequency = 12)
+
+autoplot(ip_ts, series = "Actual") +
+  autolayer(to_test_ts(sarima_real$mean), series = "SARIMA", linewidth = 1) +
+  autolayer(to_test_ts(ets_forecast$mean), series = "ETS", linewidth = 1) +
+  autolayer(to_test_ts(hw_add$mean), series = "Holt-Winters", linewidth = 1) +
+  autolayer(to_test_ts(naive_model$mean), series = "Seasonal naive", linewidth = 1) +
+  labs(x = "Year", y = "Index (2017 = 100)", colour = NULL)
+```
+
+The chart is consistent with the accuracy table and the Diebold-Mariano tests.
+SARIMA follows the level and the fluctuations of the actual series closely,
+around 100 index points. ETS and Holt-Winters drift downwards and underestimate
+the series, which explains their large errors. The seasonal naive forecast does
+reasonably well thanks to its flat trend but does not adapt to the dynamics of
+the series.

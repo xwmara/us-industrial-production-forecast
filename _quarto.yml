@@ -8,6 +8,8 @@ website:
     left:
       - href: index.qmd
         text: Overview
+      - href: univariate.qmd
+        text: Univariate models
     right:
       - icon: github
         href: https://github.com/xwmara/us-industrial-production-forecast
