@@ -552,6 +552,53 @@ dm_var_ar <- function(horizon) {
 }
 ```
 
+### Clark-West test for nested models
+
+The VAR and the AR(12) model are **nested**: the AR model is the VAR equation
+with the sentiment coefficients set to zero. If sentiment has no predictive
+value, both models estimate the same thing, but the VAR also estimates 12
+coefficients whose true value is zero; this estimation noise makes its
+forecasts slightly worse even when sentiment is useful. The Diebold-Mariano
+test compares raw squared errors, so for nested models it is biased towards
+the smaller model and rarely rejects equal accuracy.
+
+The Clark-West (2007) test corrects the squared errors of the larger model for
+this noise, by adding back the squared difference between the two forecasts.
+It is one-sided: the alternative hypothesis is that the VAR forecasts better
+than the AR model. For 12-month forecasts the standard error accounts for the
+overlap between consecutive forecasts (Newey-West with 11 lags).
+
+```{r}
+#| label: tbl-clark-west
+#| tbl-cap: "Clark-West tests, VAR (with sentiment) vs AR(12) (without sentiment)"
+clark_west <- function(e_small, e_large, h) {
+  ok <- !is.na(e_small) & !is.na(e_large)
+  es <- e_small[ok]
+  el <- e_large[ok]
+  # Forecast difference: y_hat_small - y_hat_large = e_large - e_small
+  adjusted <- es^2 - (el^2 - (es - el)^2)
+  fit <- lm(adjusted ~ 1)
+  se <- if (h == 1) {
+    sqrt(vcov(fit)[1, 1])
+  } else {
+    sqrt(sandwich::NeweyWest(fit, lag = h - 1, prewhite = FALSE, adjust = TRUE)[1, 1])
+  }
+  stat <- unname(coef(fit)[1] / se)
+  data.frame(
+    Horizon = paste(h, if (h == 1) "month" else "months"),
+    Forecasts = sum(ok),
+    `CW statistic` = round(stat, 3),
+    `p-value (one-sided)` = round(1 - pnorm(stat), 3),
+    check.names = FALSE
+  )
+}
+
+cw_table <- do.call(rbind, lapply(c(1, 3, 6, max_h), function(k) {
+  clark_west(oos_errors$`AR(12), no sentiment`[, k], oos_errors$VAR[, k], k)
+}))
+cw_table
+```
+
 1. **Adding sentiment does not improve the forecasts.** One month ahead the VAR
    and the AR model without sentiment have practically the same RMSE
    (`r sprintf("%.2f", oos_table[1, "1 month"])` and
@@ -560,7 +607,12 @@ dm_var_ar <- function(horizon) {
    slightly worse (`r sprintf("%.2f", oos_table[1, "12 months"])` against
    `r sprintf("%.2f", oos_table[2, "12 months"])`), but the difference is not
    significant (p = `r sprintf("%.2f", dm_var_ar("12 months"))`).
-2. The VAR is not more accurate than SARIMA at any of the horizons shown; at 1
+2. The Clark-West test, which is designed for nested models, gives the same
+   answer: the one-sided p-values range from
+   `r sprintf("%.2f", min(cw_table[["p-value (one-sided)"]]))` to
+   `r sprintf("%.2f", max(cw_table[["p-value (one-sided)"]]))`, so at no horizon
+   does the VAR forecast significantly better than the model without sentiment.
+3. The VAR is not more accurate than SARIMA at any of the horizons shown; at 1
    and 12 months the differences are not statistically significant.
 
 Sentiment is a statistically significant predictor *in sample* (Granger test),
