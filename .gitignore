@@ -38,3 +38,9 @@ desktop.ini
 
 # Local project notes
 AUDIT_PROIECT.md
+
+# Quarto intermediate files left by an interrupted render
+*.knit.md
+/index_files/
+/univariate_files/
+/multivariate_files/
