@@ -11,8 +11,8 @@ source("R/setup.R")
 This project forecasts the monthly **US Industrial Production Index**
 (1990–2025) and tests whether **consumer sentiment** helps to anticipate it. It
 compares classical time series models on a held-out test period, from data
-preparation and statistical testing to model diagnostics and forecast
-evaluation.
+preparation and statistical testing to model diagnostics and a rolling-origin
+backtest.
 
 ```{r}
 #| label: fig-ip
@@ -26,40 +26,72 @@ autoplot(ip_ts) +
 - **The series needs transforming before modelling.** Industrial production has
   a trend, a strong seasonal pattern and two large shocks (2008–2009 and 2020).
   Unit root tests (KPSS, ADF, Phillips-Perron) agree that it is non-stationary;
-  a log transformation, a seasonal difference and a first difference make it
-  stationary.
-- **SARIMA gives the most accurate forecasts.** Models were estimated on
-  1990–2016 and evaluated on the last 106 months (July 2016 to April 2025).
-  ARIMA(3,1,0)(0,1,1)[12] on log data has the lowest errors, ahead of the
-  seasonal naive benchmark, ETS and Holt-Winters, and the Diebold-Mariano test
-  rejects equal accuracy against ETS and Holt-Winters.
-- **Consumer sentiment adds little.** The two series are not cointegrated. In a
-  VAR(4) on first differences, sentiment one month earlier has a small positive
-  effect on industrial production, but joint Granger causality is not
-  significant at 5% (p = 0.18) and sentiment explains only about 1% of the
-  forecast error variance of production.
+  the HEGY test shows a stochastic trend but a deterministic seasonal pattern.
+- **No model clearly wins.** With a single forecast origin (June 2016), SARIMA
+  looked best (RMSE 2.93). A rolling-origin evaluation, which re-estimates the
+  models every month, is more reliable: SARIMA, ETS and Holt-Winters are
+  statistically tied one month ahead (RMSE about 2.0) and all beat a seasonal
+  naive benchmark (4.1). From about four months ahead, simply repeating last
+  year's values is as accurate as any model.
+- **Consumer sentiment has statistically significant but small predictive
+  content.** The two series are not cointegrated. In a VAR with seasonal
+  dummies, sentiment Granger-causes industrial production (p = 0.003) but not
+  the reverse, and it explains about 5% of production's forecast variance. A
+  typical sentiment shock raises the production index by about 0.4–0.5 points
+  over a year. Adding sentiment to the model **does not improve out-of-sample
+  forecasts**.
+- **Outlook:** a SARIMA model re-estimated on all data forecasts the index at
+  around 100–102 through April 2028 (95% interval 84–120).
 
-| Model | RMSE | MAE | MAPE (%) |
-|---|---:|---:|---:|
-| SARIMA(3,1,0)(0,1,1)[12], log | **2.93** | **1.79** | **1.84** |
-| Seasonal naive (benchmark) | 3.15 | 2.26 | 2.30 |
-| ETS(M,Ad,M) | 6.93 | 6.48 | 6.45 |
-| Holt-Winters, additive | 8.25 | 7.40 | 7.38 |
+| Model | 1 month ahead | 12 months ahead |
+|---|---:|---:|
+| SARIMA(3,1,0)(0,1,1)[12], log | 2.07 | 6.41 |
+| ETS(M,Ad,M) | **1.96** | 6.50 |
+| Holt-Winters, additive | 2.00 | 7.21 |
+| Seasonal naive (benchmark) | 4.11 | **4.31** |
 
-: Forecast accuracy on the test period (July 2016 to April 2025), in index points {#tbl-summary}
+: Rolling-origin RMSE in index points, forecasts made every month from June 2016 to March 2025 {#tbl-summary}
 
-**Takeaway:** for short-term forecasting of industrial production, a seasonal
-ARIMA model on log data is the most accurate of the models tested. Consumer
-sentiment plays a small role as a leading indicator.
+| Month | SARIMA forecast | 95% interval |
+|---|---:|---:|
+| October 2025 | 101.9 | 95.9 – 108.2 |
+| April 2026 | 99.9 | 91.8 – 108.7 |
+| April 2027 | 100.3 | 87.9 – 114.5 |
+| April 2028 | 100.8 | 84.5 – 120.3 |
+
+: Industrial production forecast (index, 2017 = 100), SARIMA estimated on January 1990 to April 2025 {#tbl-outlook}
+
+**Takeaway:** for forecasts up to about three months, any of the three
+statistical models clearly beats a naive benchmark; beyond that, a naive
+seasonal forecast is hard to beat. Consumer sentiment helps at the margin in
+sample, but not enough to improve forecasts.
+
+## Limitations
+
+- **Prediction intervals are probably too narrow in crises.** Model residuals
+  show ARCH effects (volatility clustering) and heavy tails, while the
+  intervals assume constant, normal errors.
+- **The pandemic dominates the errors.** A few months in 2020 produce the
+  largest forecast errors; results excluding them are reported as a robustness
+  check, and the main conclusions do not change.
+- **Revised data, not real-time data.** The backtest uses the data as revised
+  by December 2025, not the figures available to a forecaster at each date.
+- **One series and one sample.** The conclusions apply to this index and this
+  period.
+- **Seasonal differencing is a modelling choice.** The HEGY test points to
+  deterministic seasonality; a model with a first difference and monthly
+  dummies was not tested as a forecasting alternative to SARIMA.
 
 ## How the analysis is organised
 
 - [**Univariate models**](univariate.qmd): visual analysis, stationarity and
   seasonality tests, ARMA, SARIMA, ETS, Holt-Winters, a seasonal naive
-  benchmark, residual diagnostics and forecast comparison.
+  benchmark, residual diagnostics, single-origin and rolling-origin
+  evaluation, and the forecast to 2028.
 - [**VAR analysis**](multivariate.qmd): consumer sentiment, Johansen
-  cointegration test, VAR, Granger causality, impulse responses, variance
-  decomposition and a 24-month forecast.
+  cointegration test, VAR with seasonal dummies, Granger causality, impulse
+  responses, variance decomposition, an out-of-sample test of the value of
+  sentiment and a 24-month forecast.
 
 ## Data
 
@@ -82,6 +114,9 @@ and renv for package versions.
 ## About
 
 This is a portfolio adaptation of a team project for the Time Series course at
-the Bucharest University of Economic Studies (2025). See the
+the Bucharest University of Economic Studies (2025). The analysis was reviewed
+and extended for this version: the forecast evaluation, the VAR specification
+and several tests were corrected, and an out-of-sample test of consumer
+sentiment was added. See the
 [README](https://github.com/xwmara/us-industrial-production-forecast#credits)
 for credits.
