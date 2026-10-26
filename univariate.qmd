@@ -646,10 +646,10 @@ ets_last_better <- max(which(rmse_of("ETS") < rmse_of("Seasonal naive")))
 ```
 
 The errors of the statistical models grow quickly with the horizon, while the
-seasonal naive error stays almost flat. SARIMA has a lower RMSE than the
-seasonal naive forecast up to `r sarima_last_better` months ahead and ETS up to
-`r ets_last_better` months ahead; beyond that, repeating last year's values is
-more accurate on this sample.
+seasonal naive error stays almost flat. The seasonal naive forecast has a lower
+RMSE than SARIMA from `r sarima_last_better + 1` months ahead and than ETS from
+`r ets_last_better + 1` months ahead. Whether these differences are
+statistically significant is tested below.
 
 The 2020 pandemic produces a few very large errors that dominate the RMSE. As
 a robustness check, the table below excludes forecasts whose target month falls
@@ -715,29 +715,56 @@ dm_p <- function(horizon, model) {
 }
 ```
 
+The next table compares each statistical model with the seasonal naive
+benchmark at every horizon from 1 to 12 months.
+
+```{r}
+#| label: tbl-dm-naive
+#| tbl-cap: "Diebold-Mariano p-values, each model vs the seasonal naive benchmark, by horizon"
+naive_dm <- data.frame(Horizon = 1:max_h)
+for (m in c("SARIMA", "ETS", "Holt-Winters")) {
+  naive_dm[[m]] <- sapply(1:max_h, function(k) {
+    a <- cv_errors[[m]][, k]
+    b <- cv_errors[["Seasonal naive"]][, k]
+    ok <- !is.na(a) & !is.na(b)
+    dm.test(a[ok], b[ok], alternative = "two.sided", h = k, power = 2)$p.value
+  })
+}
+naive_dm_display <- naive_dm
+naive_dm_display[, -1] <- round(naive_dm[, -1], 3)
+naive_dm_display
+
+naive_p <- as.matrix(naive_dm[, -1])
+```
+
 1. **One month ahead**, SARIMA, ETS and Holt-Winters are very close (RMSE of
    `r sprintf("%.2f", cv_1["SARIMA", "RMSE"])` for SARIMA,
    `r sprintf("%.2f", cv_1["ETS", "RMSE"])` for ETS and
    `r sprintf("%.2f", cv_1["Holt-Winters", "RMSE"])` for Holt-Winters), and the
    Diebold-Mariano test does not distinguish SARIMA from ETS (p `r fmt_p(dm_p("1 month", "ETS"))`) or
-   Holt-Winters (p `r fmt_p(dm_p("1 month", "Holt-Winters"))`). All three clearly
-   beat the seasonal naive benchmark (RMSE
-   `r round(cv_1["Seasonal naive", "RMSE"], 2)`; SARIMA vs seasonal naive
-   p `r fmt_p(dm_p("1 month", "Seasonal naive"))`).
-2. **Twelve months ahead**, the seasonal naive forecast has the lowest errors
-   (RMSE `r round(cv_12["Seasonal naive", "RMSE"], 2)` against
-   `r round(cv_12["SARIMA", "RMSE"], 2)` for SARIMA), but none of the
-   differences is statistically significant (all p-values above
-   `r floor(100 * min(dm_table[["p-value"]][dm_table$Horizon == "12 months"])) / 100`).
+   Holt-Winters (p `r fmt_p(dm_p("1 month", "Holt-Winters"))`). All three
+   significantly beat the seasonal naive benchmark (RMSE
+   `r round(cv_1["Seasonal naive", "RMSE"], 2)`; p-values of at most
+   `r sprintf("%.3f", max(naive_p[1, ]))`).
+2. **From about four months ahead**, the seasonal naive forecast has a lower
+   RMSE than the statistical models (twelve months ahead:
+   `r round(cv_12["Seasonal naive", "RMSE"], 2)` against
+   `r round(cv_12["SARIMA", "RMSE"], 2)` for SARIMA), but the difference is
+   **not statistically significant** at any horizon (from three months on, all
+   p-values are above `r floor(100 * min(naive_p[3:max_h, ])) / 100`). Two months
+   ahead the evidence that the models beat the benchmark is already weak
+   (p between `r sprintf("%.2f", min(naive_p[2, ]))` and
+   `r sprintf("%.2f", max(naive_p[2, ]))`).
 3. Excluding the pandemic months lowers all errors substantially. One month
    ahead the three statistical models remain almost tied, and twelve months
    ahead the seasonal naive forecast is still the most accurate.
 
 The rolling-origin evaluation does **not** confirm the large advantage of
-SARIMA seen with a single forecast origin. At short horizons (one to a few
-months) the three statistical models perform equally well and all beat the
-seasonal naive benchmark; at a one-year horizon no model beats simply repeating
-the last year's values.
+SARIMA seen with a single forecast origin. One month ahead the three
+statistical models perform equally well and significantly beat the seasonal
+naive benchmark. From about four months ahead the seasonal naive forecast has
+lower errors, but the differences are not statistically significant: on this
+sample the models add clear value only at the shortest horizon.
 
 ## Forecast beyond the sample
 
