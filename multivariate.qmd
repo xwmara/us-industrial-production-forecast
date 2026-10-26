@@ -661,3 +661,29 @@ ggplot(df_ipb, aes(x = time, y = value)) +
    pattern through the monthly dummies. On average it stays around
    `r round(mean(fc_ipb_level), 1)` index points over the 24 months and ends at
    `r round(tail(fc_ipb_level, 1), 2)`, close to the recent level of the series.
+
+```{r}
+#| label: save-results
+#| include: false
+# Key results read by the overview page (index.qmd)
+dir.create("results", showWarnings = FALSE)
+saveRDS(
+  list(
+    johansen_trace_r0 = jo_trace$Statistic[2],
+    johansen_trace_cv5 = jo_trace[["5pct"]][2],
+    var_p = var_p,
+    granger_umc_p = unname(granger_umc$Granger$p.value[1, 1]),
+    granger_ipb_p = unname(granger_ipb$Granger$p.value[1, 1]),
+    fevd_10 = fevd_10,
+    shock_size = shock_size(var_model, "UMCSENT_d"),
+    cum_irf_12 = c(
+      base = cum_base$irf$UMCSENT_d[13, 1],
+      reversed = cum_rev$irf$UMCSENT_d[13, 1]
+    ),
+    oos_table = oos_table,
+    oos_dm = oos_dm,
+    cw_table = cw_table
+  ),
+  "results/multivariate.rds"
+)
+```

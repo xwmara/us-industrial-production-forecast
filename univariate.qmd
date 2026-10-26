@@ -817,3 +817,35 @@ months, while the 95% interval widens from
 month ahead to about
 ±`r round((future$upper[h_future, "95%"] - future$lower[h_future, "95%"]) / 2, 0)`
 points after three years.
+
+```{r}
+#| label: save-results
+#| include: false
+# Key results read by the overview page (index.qmd)
+dir.create("results", showWarnings = FALSE)
+saveRDS(
+  list(
+    n_obs = length(ip_ts),
+    test_months = h,
+    sarima_spec = as.character(sarima_final),
+    ets_spec = ets_auto$method,
+    hegy_t1_p = hegy_level[["p-value"]][hegy_level$Statistic == "t_1"],
+    hegy_seasonal_max_p = max(hegy_level[["p-value"]][hegy_level$Statistic != "t_1"]),
+    single_origin = acc_table,
+    cv_1 = cv_1,
+    cv_12 = cv_12,
+    dm_table = dm_table,
+    naive_p = naive_p,
+    sarima_last_better = sarima_last_better,
+    ets_last_better = ets_last_better,
+    future = data.frame(
+      month = format(zoo::as.yearmon(time(future$mean)[future_steps]), "%B %Y"),
+      forecast = future$mean[future_steps],
+      lower95 = future$lower[future_steps, "95%"],
+      upper95 = future$upper[future_steps, "95%"]
+    ),
+    future_mean = future$mean
+  ),
+  "results/univariate.rds"
+)
+```

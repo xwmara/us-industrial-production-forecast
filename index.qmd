@@ -1,11 +1,34 @@
 ---
 title: "Forecasting US Industrial Production"
 subtitle: "SARIMA, exponential smoothing and a VAR with consumer sentiment"
+execute:
+  freeze: false  # always re-read the results saved by the analysis pages
 ---
 
 ```{r}
 #| label: setup
 source("R/setup.R")
+
+# Results saved by univariate.qmd and multivariate.qmd
+uni <- readRDS("results/univariate.rds")
+mv <- readRDS("results/multivariate.rds")
+
+f2 <- function(x) sprintf("%.2f", x)
+f1 <- function(x) sprintf("%.1f", x)
+
+# Rolling-origin results
+cv_rmse_1 <- uni$cv_1[, "RMSE"]
+cv_rmse_12 <- uni$cv_12[, "RMSE"]
+stat_models <- c("SARIMA", "ETS", "Holt-Winters")
+naive_lower_from <- min(uni$sarima_last_better, uni$ets_last_better) + 1
+naive_p_after <- uni$naive_p[naive_lower_from:nrow(uni$naive_p), ]
+
+# Out-of-sample value of sentiment
+cw_p <- mv$cw_table[["p-value (one-sided)"]]
+
+# Outlook
+fut <- uni$future
+fut_last <- fut[nrow(fut), ]
 ```
 
 This project forecasts the monthly **US Industrial Production Index**
@@ -26,45 +49,63 @@ autoplot(ip_ts) +
 - **The series needs transforming before modelling.** Industrial production has
   a trend, a strong seasonal pattern and two large shocks (2008–2009 and 2020).
   Unit root tests (KPSS, ADF, Phillips-Perron) agree that it is non-stationary;
-  the HEGY test shows a stochastic trend but a deterministic seasonal pattern.
+  the HEGY test shows a stochastic trend (p = `r f2(uni$hegy_t1_p)`) but a
+  deterministic seasonal pattern (seasonal unit roots rejected, p < 0.01).
 - **No model clearly wins.** With a single forecast origin (June 2016), SARIMA
-  looked best (RMSE 2.93). A rolling-origin evaluation, which re-estimates the
-  models every month, is more reliable: SARIMA, ETS and Holt-Winters are
-  statistically tied one month ahead (RMSE about 2.0) and all beat a seasonal
-  naive benchmark (4.1). From about four months ahead, simply repeating last
-  year's values is as accurate as any model.
+  looked best (RMSE `r f2(uni$single_origin["SARIMA", "RMSE"])`). A
+  rolling-origin evaluation, which re-estimates the models every month, is more
+  reliable: SARIMA, ETS and Holt-Winters are statistically tied one month ahead
+  (RMSE `r f2(min(cv_rmse_1[stat_models]))`–`r f2(max(cv_rmse_1[stat_models]))`)
+  and all significantly beat a seasonal naive benchmark
+  (`r f2(cv_rmse_1["Seasonal naive"])`). From about `r naive_lower_from` months
+  ahead the seasonal naive forecast has a lower RMSE, but the difference is not
+  statistically significant at any horizon (Diebold-Mariano p ≥ `r floor(100 * min(naive_p_after)) / 100`).
 - **Consumer sentiment has statistically significant but small predictive
   content.** The two series are not cointegrated. In a VAR with seasonal
-  dummies, sentiment Granger-causes industrial production (p = 0.003) but not
-  the reverse, and it explains about 5% of production's forecast variance. A
-  typical sentiment shock raises the production index by about 0.4–0.5 points
-  over a year. Adding sentiment to the model **does not improve out-of-sample
-  forecasts**.
+  dummies, sentiment Granger-causes industrial production
+  (p = `r sprintf("%.3f", mv$granger_umc_p)`) but not the reverse
+  (p = `r f2(mv$granger_ipb_p)`), and it explains about
+  `r round(100 * mv$fevd_10["IPB_d", "UMCSENT_d"])`% of production's forecast
+  variance. A typical sentiment shock (about `r round(mv$shock_size)` points)
+  raises the production index by about
+  `r f1(min(mv$cum_irf_12))`–`r f1(max(mv$cum_irf_12))` points over a year.
+  Adding sentiment to the model **does not improve out-of-sample forecasts**:
+  neither the Diebold-Mariano test nor the Clark-West test for nested models
+  finds a gain (Clark-West one-sided p between `r f2(min(cw_p))` and
+  `r f2(max(cw_p))`).
 - **Outlook:** a SARIMA model re-estimated on all data forecasts the index at
-  around 100–102 through April 2028 (95% interval 84–120).
+  around `r round(min(fut$forecast))`–`r round(max(fut$forecast))`
+  through `r fut_last$month` (95% interval `r round(fut_last$lower95)`–`r round(fut_last$upper95)`).
 
-| Model | 1 month ahead | 12 months ahead |
-|---|---:|---:|
-| SARIMA(3,1,0)(0,1,1)[12], log | 2.07 | 6.41 |
-| ETS(M,Ad,M) | **1.96** | 6.50 |
-| Holt-Winters, additive | 2.00 | 7.21 |
-| Seasonal naive (benchmark) | 4.11 | **4.31** |
+```{r}
+#| label: tbl-summary
+#| tbl-cap: "Rolling-origin RMSE in index points, forecasts made every month from June 2016 to March 2025"
+summary_models <- c("SARIMA", "ETS", "Holt-Winters", "Seasonal naive")
+data.frame(
+  Model = c(paste0(uni$sarima_spec, ", log"), uni$ets_spec, "Holt-Winters, additive",
+            "Seasonal naive (benchmark)"),
+  `1 month ahead` = f2(cv_rmse_1[summary_models]),
+  `12 months ahead` = f2(cv_rmse_12[summary_models]),
+  check.names = FALSE
+)
+```
 
-: Rolling-origin RMSE in index points, forecasts made every month from June 2016 to March 2025 {#tbl-summary}
+```{r}
+#| label: tbl-outlook
+#| tbl-cap: "Industrial production forecast (index, 2017 = 100), SARIMA estimated on January 1990 to April 2025"
+data.frame(
+  Month = fut$month,
+  `SARIMA forecast` = f1(fut$forecast),
+  `95% interval` = paste(f1(fut$lower95), "–", f1(fut$upper95)),
+  check.names = FALSE
+)
+```
 
-| Month | SARIMA forecast | 95% interval |
-|---|---:|---:|
-| October 2025 | 101.9 | 95.9 – 108.2 |
-| April 2026 | 99.9 | 91.8 – 108.7 |
-| April 2027 | 100.3 | 87.9 – 114.5 |
-| April 2028 | 100.8 | 84.5 – 120.3 |
-
-: Industrial production forecast (index, 2017 = 100), SARIMA estimated on January 1990 to April 2025 {#tbl-outlook}
-
-**Takeaway:** for forecasts up to about three months, any of the three
-statistical models clearly beats a naive benchmark; beyond that, a naive
-seasonal forecast is hard to beat. Consumer sentiment helps at the margin in
-sample, but not enough to improve forecasts.
+**Takeaway:** one month ahead, any of the three statistical models clearly
+beats a naive benchmark; from about `r naive_lower_from` months ahead a naive
+seasonal forecast has lower errors, although not significantly, so the models
+add clear value only at the shortest horizon. Consumer sentiment helps at the
+margin in sample, but not enough to improve forecasts.
 
 ## Limitations
 
@@ -91,7 +132,7 @@ sample, but not enough to improve forecasts.
 - [**VAR analysis**](multivariate.qmd): consumer sentiment, Johansen
   cointegration test, VAR with seasonal dummies, Granger causality, impulse
   responses, variance decomposition, an out-of-sample test of the value of
-  sentiment and a 24-month forecast.
+  sentiment (Diebold-Mariano and Clark-West) and a 24-month forecast.
 
 ## Data
 
@@ -100,16 +141,16 @@ sample, but not enough to improve forecasts.
 | IPB50001N | Industrial Production: Total Index, 2017 = 100, not seasonally adjusted | Board of Governors of the Federal Reserve System, via FRED |
 | UMCSENT | University of Michigan: Consumer Sentiment, 1966:Q1 = 100 | Surveys of Consumers, University of Michigan, via FRED |
 
-Monthly data from January 1990 to April 2025 (424 observations), retrieved from
-ALFRED using the vintage of 17 December 2025 so that the results can be
-reproduced exactly. See the
+Monthly data from January 1990 to April 2025 (`r uni$n_obs` observations),
+retrieved from ALFRED using the vintage of 17 December 2025 so that the results
+can be reproduced exactly. See the
 [data notes](https://github.com/xwmara/us-industrial-production-forecast/tree/main/data)
 for citations and terms of use.
 
 ## Tools
 
-R (forecast, urca, tseries, uroot, lmtest, FinTS, vars), Quarto for the report
-and renv for package versions.
+R (forecast, urca, tseries, uroot, lmtest, FinTS, vars, sandwich), Quarto for
+the report and renv for package versions.
 
 ## About
 
