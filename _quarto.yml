@@ -1,6 +1,11 @@
 project:
   type: website
   output-dir: _site
+  # Only these pages are part of the site; other .md files stay out of it
+  render:
+    - index.qmd
+    - univariate.qmd
+    - multivariate.qmd
 
 website:
   title: "US Industrial Production Forecast"
