@@ -199,7 +199,28 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="st">"R/setup.R"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="st">"R/setup.R"</span>)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Results saved by univariate.qmd and multivariate.qmd</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>uni <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">"results/univariate.rds"</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>mv <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">"results/multivariate.rds"</span>)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>f2 <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="fu">sprintf</span>(<span class="st">"%.2f"</span>, x)</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>f1 <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="fu">sprintf</span>(<span class="st">"%.1f"</span>, x)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Rolling-origin results</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>cv_rmse_1 <span class="ot">&lt;-</span> uni<span class="sc">$</span>cv_1[, <span class="st">"RMSE"</span>]</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>cv_rmse_12 <span class="ot">&lt;-</span> uni<span class="sc">$</span>cv_12[, <span class="st">"RMSE"</span>]</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>stat_models <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"SARIMA"</span>, <span class="st">"ETS"</span>, <span class="st">"Holt-Winters"</span>)</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>naive_lower_from <span class="ot">&lt;-</span> <span class="fu">min</span>(uni<span class="sc">$</span>sarima_last_better, uni<span class="sc">$</span>ets_last_better) <span class="sc">+</span> <span class="dv">1</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>naive_p_after <span class="ot">&lt;-</span> uni<span class="sc">$</span>naive_p[naive_lower_from<span class="sc">:</span><span class="fu">nrow</span>(uni<span class="sc">$</span>naive_p), ]</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Out-of-sample value of sentiment</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>cw_p <span class="ot">&lt;-</span> mv<span class="sc">$</span>cw_table[[<span class="st">"p-value (one-sided)"</span>]]</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="co"># Outlook</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>fut <span class="ot">&lt;-</span> uni<span class="sc">$</span>future</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>fut_last <span class="ot">&lt;-</span> fut[<span class="fu">nrow</span>(fut), ]</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
 <p>This project forecasts the monthly <strong>US Industrial Production Index</strong> (1990–2025) and tests whether <strong>consumer sentiment</strong> helps to anticipate it. It compares classical time series models on a held-out test period, from data preparation and statistical testing to model diagnostics and a rolling-origin backtest.</p>
@@ -225,92 +246,124 @@ Figure&nbsp;1: US industrial production, total index (2017 = 100, not seasonally
 <section id="key-findings" class="level2">
 <h2 class="anchored" data-anchor-id="key-findings">Key findings</h2>
 <ul>
-<li><strong>The series needs transforming before modelling.</strong> Industrial production has a trend, a strong seasonal pattern and two large shocks (2008–2009 and 2020). Unit root tests (KPSS, ADF, Phillips-Perron) agree that it is non-stationary; the HEGY test shows a stochastic trend but a deterministic seasonal pattern.</li>
-<li><strong>No model clearly wins.</strong> With a single forecast origin (June 2016), SARIMA looked best (RMSE 2.93). A rolling-origin evaluation, which re-estimates the models every month, is more reliable: SARIMA, ETS and Holt-Winters are statistically tied one month ahead (RMSE about 2.0) and all beat a seasonal naive benchmark (4.1). From about four months ahead, simply repeating last year’s values is as accurate as any model.</li>
-<li><strong>Consumer sentiment has statistically significant but small predictive content.</strong> The two series are not cointegrated. In a VAR with seasonal dummies, sentiment Granger-causes industrial production (p = 0.003) but not the reverse, and it explains about 5% of production’s forecast variance. A typical sentiment shock raises the production index by about 0.4–0.5 points over a year. Adding sentiment to the model <strong>does not improve out-of-sample forecasts</strong>.</li>
+<li><strong>The series needs transforming before modelling.</strong> Industrial production has a trend, a strong seasonal pattern and two large shocks (2008–2009 and 2020). Unit root tests (KPSS, ADF, Phillips-Perron) agree that it is non-stationary; the HEGY test shows a stochastic trend (p = 0.43) but a deterministic seasonal pattern (seasonal unit roots rejected, p &lt; 0.01).</li>
+<li><strong>No model clearly wins.</strong> With a single forecast origin (June 2016), SARIMA looked best (RMSE 2.93). A rolling-origin evaluation, which re-estimates the models every month, is more reliable: SARIMA, ETS and Holt-Winters are statistically tied one month ahead (RMSE 1.96–2.07) and all significantly beat a seasonal naive benchmark (4.11). From about 4 months ahead the seasonal naive forecast has a lower RMSE, but the difference is not statistically significant at any horizon (Diebold-Mariano p ≥ 0.29).</li>
+<li><strong>Consumer sentiment has statistically significant but small predictive content.</strong> The two series are not cointegrated. In a VAR with seasonal dummies, sentiment Granger-causes industrial production (p = 0.003) but not the reverse (p = 0.42), and it explains about 5% of production’s forecast variance. A typical sentiment shock (about 4 points) raises the production index by about 0.4–0.5 points over a year. Adding sentiment to the model <strong>does not improve out-of-sample forecasts</strong>: neither the Diebold-Mariano test nor the Clark-West test for nested models finds a gain (Clark-West one-sided p between 0.19 and 0.87).</li>
 <li><strong>Outlook:</strong> a SARIMA model re-estimated on all data forecasts the index at around 100–102 through April 2028 (95% interval 84–120).</li>
 </ul>
-<div id="tbl-summary" class="quarto-float quarto-figure quarto-figure-center anchored">
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>summary_models <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"SARIMA"</span>, <span class="st">"ETS"</span>, <span class="st">"Holt-Winters"</span>, <span class="st">"Seasonal naive"</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">data.frame</span>(</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">Model =</span> <span class="fu">c</span>(<span class="fu">paste0</span>(uni<span class="sc">$</span>sarima_spec, <span class="st">", log"</span>), uni<span class="sc">$</span>ets_spec, <span class="st">"Holt-Winters, additive"</span>,</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Seasonal naive (benchmark)"</span>),</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="st">`</span><span class="at">1 month ahead</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">f2</span>(cv_rmse_1[summary_models]),</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  <span class="st">`</span><span class="at">12 months ahead</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">f2</span>(cv_rmse_12[summary_models]),</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">check.names =</span> <span class="cn">FALSE</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div id="tbl-summary" class="cell quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-summary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Table&nbsp;1: Rolling-origin RMSE in index points, forecasts made every month from June 2016 to March 2025
 </figcaption>
 <div aria-describedby="tbl-summary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<table class="caption-top table">
+<div class="cell-output-display">
+<div class="kable-table">
+<table class="cell caption-top table table-sm table-striped small">
 <thead>
 <tr class="header">
-<th>Model</th>
-<th style="text-align: right;">1 month ahead</th>
-<th style="text-align: right;">12 months ahead</th>
+<th style="text-align: left;">Model</th>
+<th style="text-align: left;">1 month ahead</th>
+<th style="text-align: left;">12 months ahead</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td>SARIMA(3,1,0)(0,1,1)[12], log</td>
-<td style="text-align: right;">2.07</td>
-<td style="text-align: right;">6.41</td>
+<td style="text-align: left;">ARIMA(3,1,0)(0,1,1)[12], log</td>
+<td style="text-align: left;">2.07</td>
+<td style="text-align: left;">6.41</td>
 </tr>
 <tr class="even">
-<td>ETS(M,Ad,M)</td>
-<td style="text-align: right;"><strong>1.96</strong></td>
-<td style="text-align: right;">6.50</td>
+<td style="text-align: left;">ETS(M,Ad,M)</td>
+<td style="text-align: left;">1.96</td>
+<td style="text-align: left;">6.50</td>
 </tr>
 <tr class="odd">
-<td>Holt-Winters, additive</td>
-<td style="text-align: right;">2.00</td>
-<td style="text-align: right;">7.21</td>
+<td style="text-align: left;">Holt-Winters, additive</td>
+<td style="text-align: left;">2.00</td>
+<td style="text-align: left;">7.21</td>
 </tr>
 <tr class="even">
-<td>Seasonal naive (benchmark)</td>
-<td style="text-align: right;">4.11</td>
-<td style="text-align: right;"><strong>4.31</strong></td>
+<td style="text-align: left;">Seasonal naive (benchmark)</td>
+<td style="text-align: left;">4.11</td>
+<td style="text-align: left;">4.31</td>
 </tr>
 </tbody>
 </table>
 </div>
+</div>
+</div>
 </figure>
 </div>
-<div id="tbl-outlook" class="quarto-float quarto-figure quarto-figure-center anchored">
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">data.frame</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">Month =</span> fut<span class="sc">$</span>month,</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">`</span><span class="at">SARIMA forecast</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">f1</span>(fut<span class="sc">$</span>forecast),</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">`</span><span class="at">95% interval</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">paste</span>(<span class="fu">f1</span>(fut<span class="sc">$</span>lower95), <span class="st">"–"</span>, <span class="fu">f1</span>(fut<span class="sc">$</span>upper95)),</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">check.names =</span> <span class="cn">FALSE</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div id="tbl-outlook" class="cell quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-outlook-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Table&nbsp;2: Industrial production forecast (index, 2017 = 100), SARIMA estimated on January 1990 to April 2025
 </figcaption>
 <div aria-describedby="tbl-outlook-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<table class="caption-top table">
+<div class="cell-output-display">
+<div class="kable-table">
+<table class="cell caption-top table table-sm table-striped small">
 <thead>
 <tr class="header">
-<th>Month</th>
-<th style="text-align: right;">SARIMA forecast</th>
-<th style="text-align: right;">95% interval</th>
+<th style="text-align: left;">Month</th>
+<th style="text-align: left;">SARIMA forecast</th>
+<th style="text-align: left;">95% interval</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td>October 2025</td>
-<td style="text-align: right;">101.9</td>
-<td style="text-align: right;">95.9 – 108.2</td>
+<td style="text-align: left;">October 2025</td>
+<td style="text-align: left;">101.9</td>
+<td style="text-align: left;">95.9 – 108.2</td>
 </tr>
 <tr class="even">
-<td>April 2026</td>
-<td style="text-align: right;">99.9</td>
-<td style="text-align: right;">91.8 – 108.7</td>
+<td style="text-align: left;">April 2026</td>
+<td style="text-align: left;">99.9</td>
+<td style="text-align: left;">91.8 – 108.7</td>
 </tr>
 <tr class="odd">
-<td>April 2027</td>
-<td style="text-align: right;">100.3</td>
-<td style="text-align: right;">87.9 – 114.5</td>
+<td style="text-align: left;">April 2027</td>
+<td style="text-align: left;">100.3</td>
+<td style="text-align: left;">87.9 – 114.5</td>
 </tr>
 <tr class="even">
-<td>April 2028</td>
-<td style="text-align: right;">100.8</td>
-<td style="text-align: right;">84.5 – 120.3</td>
+<td style="text-align: left;">April 2028</td>
+<td style="text-align: left;">100.8</td>
+<td style="text-align: left;">84.5 – 120.3</td>
 </tr>
 </tbody>
 </table>
 </div>
+</div>
+</div>
 </figure>
 </div>
-<p><strong>Takeaway:</strong> for forecasts up to about three months, any of the three statistical models clearly beats a naive benchmark; beyond that, a naive seasonal forecast is hard to beat. Consumer sentiment helps at the margin in sample, but not enough to improve forecasts.</p>
+</div>
+<p><strong>Takeaway:</strong> one month ahead, any of the three statistical models clearly beats a naive benchmark; from about 4 months ahead a naive seasonal forecast has lower errors, although not significantly, so the models add clear value only at the shortest horizon. Consumer sentiment helps at the margin in sample, but not enough to improve forecasts.</p>
 </section>
 <section id="limitations" class="level2">
 <h2 class="anchored" data-anchor-id="limitations">Limitations</h2>
@@ -326,7 +379,7 @@ Table&nbsp;2: Industrial production forecast (index, 2017 = 100), SARIMA estimat
 <h2 class="anchored" data-anchor-id="how-the-analysis-is-organised">How the analysis is organised</h2>
 <ul>
 <li><a href="./univariate.html"><strong>Univariate models</strong></a>: visual analysis, stationarity and seasonality tests, ARMA, SARIMA, ETS, Holt-Winters, a seasonal naive benchmark, residual diagnostics, single-origin and rolling-origin evaluation, and the forecast to 2028.</li>
-<li><a href="./multivariate.html"><strong>VAR analysis</strong></a>: consumer sentiment, Johansen cointegration test, VAR with seasonal dummies, Granger causality, impulse responses, variance decomposition, an out-of-sample test of the value of sentiment and a 24-month forecast.</li>
+<li><a href="./multivariate.html"><strong>VAR analysis</strong></a>: consumer sentiment, Johansen cointegration test, VAR with seasonal dummies, Granger causality, impulse responses, variance decomposition, an out-of-sample test of the value of sentiment (Diebold-Mariano and Clark-West) and a 24-month forecast.</li>
 </ul>
 </section>
 <section id="data" class="level2">
@@ -361,7 +414,7 @@ Table&nbsp;2: Industrial production forecast (index, 2017 = 100), SARIMA estimat
 </section>
 <section id="tools" class="level2">
 <h2 class="anchored" data-anchor-id="tools">Tools</h2>
-<p>R (forecast, urca, tseries, uroot, lmtest, FinTS, vars), Quarto for the report and renv for package versions.</p>
+<p>R (forecast, urca, tseries, uroot, lmtest, FinTS, vars, sandwich), Quarto for the report and renv for package versions.</p>
 </section>
 <section id="about" class="level2">
 <h2 class="anchored" data-anchor-id="about">About</h2>
@@ -824,128 +877,169 @@ Table&nbsp;2: Industrial production forecast (index, 2017 = 100), SARIMA estimat
     }
   });
   </script><div class="modal fade" id="quarto-embedded-source-code-modal" tabindex="-1" aria-labelledby="quarto-embedded-source-code-modal-label" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="quarto-embedded-source-code-modal-label">Source Code</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="">
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Forecasting US Industrial Production"</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="an">subtitle:</span><span class="co"> "SARIMA, exponential smoothing and a VAR with consumer sentiment"</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="st">"R/setup.R"</span>)</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>This project forecasts the monthly **US Industrial Production Index**</span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>(1990–2025) and tests whether **consumer sentiment** helps to anticipate it. It</span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>compares classical time series models on a held-out test period, from data</span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>preparation and statistical testing to model diagnostics and a rolling-origin</span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>backtest.</span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: fig-ip</span></span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-cap: "US industrial production, total index (2017 = 100, not seasonally adjusted)"</span></span>
-<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a><span class="fu">autoplot</span>(ip_ts) <span class="sc">+</span></span>
-<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">"Index (2017 = 100)"</span>)</span>
-<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a><span class="fu">## Key findings</span></span>
-<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**The series needs transforming before modelling.** Industrial production has</span>
-<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>  a trend, a strong seasonal pattern and two large shocks (2008–2009 and 2020).</span>
-<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>  Unit root tests (KPSS, ADF, Phillips-Perron) agree that it is non-stationary;</span>
-<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>  the HEGY test shows a stochastic trend but a deterministic seasonal pattern.</span>
-<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**No model clearly wins.** With a single forecast origin (June 2016), SARIMA</span>
-<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>  looked best (RMSE 2.93). A rolling-origin evaluation, which re-estimates the</span>
-<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>  models every month, is more reliable: SARIMA, ETS and Holt-Winters are</span>
-<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>  statistically tied one month ahead (RMSE about 2.0) and all beat a seasonal</span>
-<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>  naive benchmark (4.1). From about four months ahead, simply repeating last</span>
-<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>  year's values is as accurate as any model.</span>
-<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Consumer sentiment has statistically significant but small predictive</span>
-<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>  content.** The two series are not cointegrated. In a VAR with seasonal</span>
-<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>  dummies, sentiment Granger-causes industrial production (p = 0.003) but not</span>
-<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a>  the reverse, and it explains about 5% of production's forecast variance. A</span>
-<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>  typical sentiment shock raises the production index by about 0.4–0.5 points</span>
-<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a>  over a year. Adding sentiment to the model **does not improve out-of-sample</span>
-<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>  forecasts**.</span>
-<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Outlook:** a SARIMA model re-estimated on all data forecasts the index at</span>
-<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a>  around 100–102 through April 2028 (95% interval 84–120).</span>
-<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Model <span class="pp">|</span> 1 month ahead <span class="pp">|</span> 12 months ahead <span class="pp">|</span></span>
-<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---:|---:|</span></span>
-<span id="cb3-52"><a href="#cb3-52" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> SARIMA(3,1,0)(0,1,1)<span class="co">[</span><span class="ot">12</span><span class="co">]</span>, log <span class="pp">|</span> 2.07 <span class="pp">|</span> 6.41 <span class="pp">|</span></span>
-<span id="cb3-53"><a href="#cb3-53" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> ETS(M,Ad,M) <span class="pp">|</span> **1.96** <span class="pp">|</span> 6.50 <span class="pp">|</span></span>
-<span id="cb3-54"><a href="#cb3-54" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Holt-Winters, additive <span class="pp">|</span> 2.00 <span class="pp">|</span> 7.21 <span class="pp">|</span></span>
-<span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Seasonal naive (benchmark) <span class="pp">|</span> 4.11 <span class="pp">|</span> **4.31** <span class="pp">|</span></span>
-<span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a>: Rolling-origin RMSE in index points, forecasts made every month from June 2016 to March 2025 {#tbl-summary}</span>
-<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Month <span class="pp">|</span> SARIMA forecast <span class="pp">|</span> 95% interval <span class="pp">|</span></span>
-<span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---:|---:|</span></span>
-<span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> October 2025 <span class="pp">|</span> 101.9 <span class="pp">|</span> 95.9 – 108.2 <span class="pp">|</span></span>
-<span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> April 2026 <span class="pp">|</span> 99.9 <span class="pp">|</span> 91.8 – 108.7 <span class="pp">|</span></span>
-<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> April 2027 <span class="pp">|</span> 100.3 <span class="pp">|</span> 87.9 – 114.5 <span class="pp">|</span></span>
-<span id="cb3-64"><a href="#cb3-64" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> April 2028 <span class="pp">|</span> 100.8 <span class="pp">|</span> 84.5 – 120.3 <span class="pp">|</span></span>
-<span id="cb3-65"><a href="#cb3-65" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-66"><a href="#cb3-66" aria-hidden="true" tabindex="-1"></a>: Industrial production forecast (index, 2017 = 100), SARIMA estimated on January 1990 to April 2025 {#tbl-outlook}</span>
-<span id="cb3-67"><a href="#cb3-67" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-68"><a href="#cb3-68" aria-hidden="true" tabindex="-1"></a>**Takeaway:** for forecasts up to about three months, any of the three</span>
-<span id="cb3-69"><a href="#cb3-69" aria-hidden="true" tabindex="-1"></a>statistical models clearly beats a naive benchmark; beyond that, a naive</span>
-<span id="cb3-70"><a href="#cb3-70" aria-hidden="true" tabindex="-1"></a>seasonal forecast is hard to beat. Consumer sentiment helps at the margin in</span>
-<span id="cb3-71"><a href="#cb3-71" aria-hidden="true" tabindex="-1"></a>sample, but not enough to improve forecasts.</span>
-<span id="cb3-72"><a href="#cb3-72" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-73"><a href="#cb3-73" aria-hidden="true" tabindex="-1"></a><span class="fu">## Limitations</span></span>
-<span id="cb3-74"><a href="#cb3-74" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-75"><a href="#cb3-75" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Prediction intervals are probably too narrow in crises.** Model residuals</span>
-<span id="cb3-76"><a href="#cb3-76" aria-hidden="true" tabindex="-1"></a>  show ARCH effects (volatility clustering) and heavy tails, while the</span>
-<span id="cb3-77"><a href="#cb3-77" aria-hidden="true" tabindex="-1"></a>  intervals assume constant, normal errors.</span>
-<span id="cb3-78"><a href="#cb3-78" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**The pandemic dominates the errors.** A few months in 2020 produce the</span>
-<span id="cb3-79"><a href="#cb3-79" aria-hidden="true" tabindex="-1"></a>  largest forecast errors; results excluding them are reported as a robustness</span>
-<span id="cb3-80"><a href="#cb3-80" aria-hidden="true" tabindex="-1"></a>  check, and the main conclusions do not change.</span>
-<span id="cb3-81"><a href="#cb3-81" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Revised data, not real-time data.** The backtest uses the data as revised</span>
-<span id="cb3-82"><a href="#cb3-82" aria-hidden="true" tabindex="-1"></a>  by December 2025, not the figures available to a forecaster at each date.</span>
-<span id="cb3-83"><a href="#cb3-83" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**One series and one sample.** The conclusions apply to this index and this</span>
-<span id="cb3-84"><a href="#cb3-84" aria-hidden="true" tabindex="-1"></a>  period.</span>
-<span id="cb3-85"><a href="#cb3-85" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Seasonal differencing is a modelling choice.** The HEGY test points to</span>
-<span id="cb3-86"><a href="#cb3-86" aria-hidden="true" tabindex="-1"></a>  deterministic seasonality; a model with a first difference and monthly</span>
-<span id="cb3-87"><a href="#cb3-87" aria-hidden="true" tabindex="-1"></a>  dummies was not tested as a forecasting alternative to SARIMA.</span>
-<span id="cb3-88"><a href="#cb3-88" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-89"><a href="#cb3-89" aria-hidden="true" tabindex="-1"></a><span class="fu">## How the analysis is organised</span></span>
-<span id="cb3-90"><a href="#cb3-90" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-91"><a href="#cb3-91" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span><span class="co">[</span><span class="ot">**Univariate models**</span><span class="co">](univariate.qmd)</span>: visual analysis, stationarity and</span>
-<span id="cb3-92"><a href="#cb3-92" aria-hidden="true" tabindex="-1"></a>  seasonality tests, ARMA, SARIMA, ETS, Holt-Winters, a seasonal naive</span>
-<span id="cb3-93"><a href="#cb3-93" aria-hidden="true" tabindex="-1"></a>  benchmark, residual diagnostics, single-origin and rolling-origin</span>
-<span id="cb3-94"><a href="#cb3-94" aria-hidden="true" tabindex="-1"></a>  evaluation, and the forecast to 2028.</span>
-<span id="cb3-95"><a href="#cb3-95" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span><span class="co">[</span><span class="ot">**VAR analysis**</span><span class="co">](multivariate.qmd)</span>: consumer sentiment, Johansen</span>
-<span id="cb3-96"><a href="#cb3-96" aria-hidden="true" tabindex="-1"></a>  cointegration test, VAR with seasonal dummies, Granger causality, impulse</span>
-<span id="cb3-97"><a href="#cb3-97" aria-hidden="true" tabindex="-1"></a>  responses, variance decomposition, an out-of-sample test of the value of</span>
-<span id="cb3-98"><a href="#cb3-98" aria-hidden="true" tabindex="-1"></a>  sentiment and a 24-month forecast.</span>
-<span id="cb3-99"><a href="#cb3-99" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-100"><a href="#cb3-100" aria-hidden="true" tabindex="-1"></a><span class="fu">## Data</span></span>
-<span id="cb3-101"><a href="#cb3-101" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-102"><a href="#cb3-102" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Series <span class="pp">|</span> Description <span class="pp">|</span> Source <span class="pp">|</span></span>
-<span id="cb3-103"><a href="#cb3-103" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|---|</span></span>
-<span id="cb3-104"><a href="#cb3-104" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> IPB50001N <span class="pp">|</span> Industrial Production: Total Index, 2017 = 100, not seasonally adjusted <span class="pp">|</span> Board of Governors of the Federal Reserve System, via FRED <span class="pp">|</span></span>
-<span id="cb3-105"><a href="#cb3-105" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> UMCSENT <span class="pp">|</span> University of Michigan: Consumer Sentiment, 1966:Q1 = 100 <span class="pp">|</span> Surveys of Consumers, University of Michigan, via FRED <span class="pp">|</span></span>
-<span id="cb3-106"><a href="#cb3-106" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-107"><a href="#cb3-107" aria-hidden="true" tabindex="-1"></a>Monthly data from January 1990 to April 2025 (424 observations), retrieved from</span>
-<span id="cb3-108"><a href="#cb3-108" aria-hidden="true" tabindex="-1"></a>ALFRED using the vintage of 17 December 2025 so that the results can be</span>
-<span id="cb3-109"><a href="#cb3-109" aria-hidden="true" tabindex="-1"></a>reproduced exactly. See the</span>
-<span id="cb3-110"><a href="#cb3-110" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">data notes</span><span class="co">](https://github.com/xwmara/us-industrial-production-forecast/tree/main/data)</span></span>
-<span id="cb3-111"><a href="#cb3-111" aria-hidden="true" tabindex="-1"></a>for citations and terms of use.</span>
-<span id="cb3-112"><a href="#cb3-112" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-113"><a href="#cb3-113" aria-hidden="true" tabindex="-1"></a><span class="fu">## Tools</span></span>
-<span id="cb3-114"><a href="#cb3-114" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-115"><a href="#cb3-115" aria-hidden="true" tabindex="-1"></a>R (forecast, urca, tseries, uroot, lmtest, FinTS, vars), Quarto for the report</span>
-<span id="cb3-116"><a href="#cb3-116" aria-hidden="true" tabindex="-1"></a>and renv for package versions.</span>
-<span id="cb3-117"><a href="#cb3-117" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-118"><a href="#cb3-118" aria-hidden="true" tabindex="-1"></a><span class="fu">## About</span></span>
-<span id="cb3-119"><a href="#cb3-119" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-120"><a href="#cb3-120" aria-hidden="true" tabindex="-1"></a>This is a portfolio adaptation of a team project for the Time Series course at</span>
-<span id="cb3-121"><a href="#cb3-121" aria-hidden="true" tabindex="-1"></a>the Bucharest University of Economic Studies (2025). The analysis was reviewed</span>
-<span id="cb3-122"><a href="#cb3-122" aria-hidden="true" tabindex="-1"></a>and extended for this version: the forecast evaluation, the VAR specification</span>
-<span id="cb3-123"><a href="#cb3-123" aria-hidden="true" tabindex="-1"></a>and several tests were corrected, and an out-of-sample test of consumer</span>
-<span id="cb3-124"><a href="#cb3-124" aria-hidden="true" tabindex="-1"></a>sentiment was added. See the</span>
-<span id="cb3-125"><a href="#cb3-125" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">README</span><span class="co">](https://github.com/xwmara/us-industrial-production-forecast#credits)</span></span>
-<span id="cb3-126"><a href="#cb3-126" aria-hidden="true" tabindex="-1"></a>for credits.</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Forecasting US Industrial Production"</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="an">subtitle:</span><span class="co"> "SARIMA, exponential smoothing and a VAR with consumer sentiment"</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="an">execute:</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="co">  freeze: false  # always re-read the results saved by the analysis pages</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="st">"R/setup.R"</span>)</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Results saved by univariate.qmd and multivariate.qmd</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>uni <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">"results/univariate.rds"</span>)</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>mv <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(<span class="st">"results/multivariate.rds"</span>)</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>f2 <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="fu">sprintf</span>(<span class="st">"%.2f"</span>, x)</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>f1 <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="fu">sprintf</span>(<span class="st">"%.1f"</span>, x)</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="co"># Rolling-origin results</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>cv_rmse_1 <span class="ot">&lt;-</span> uni<span class="sc">$</span>cv_1[, <span class="st">"RMSE"</span>]</span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>cv_rmse_12 <span class="ot">&lt;-</span> uni<span class="sc">$</span>cv_12[, <span class="st">"RMSE"</span>]</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>stat_models <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"SARIMA"</span>, <span class="st">"ETS"</span>, <span class="st">"Holt-Winters"</span>)</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>naive_lower_from <span class="ot">&lt;-</span> <span class="fu">min</span>(uni<span class="sc">$</span>sarima_last_better, uni<span class="sc">$</span>ets_last_better) <span class="sc">+</span> <span class="dv">1</span></span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>naive_p_after <span class="ot">&lt;-</span> uni<span class="sc">$</span>naive_p[naive_lower_from<span class="sc">:</span><span class="fu">nrow</span>(uni<span class="sc">$</span>naive_p), ]</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a><span class="co"># Out-of-sample value of sentiment</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>cw_p <span class="ot">&lt;-</span> mv<span class="sc">$</span>cw_table[[<span class="st">"p-value (one-sided)"</span>]]</span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a><span class="co"># Outlook</span></span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>fut <span class="ot">&lt;-</span> uni<span class="sc">$</span>future</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>fut_last <span class="ot">&lt;-</span> fut[<span class="fu">nrow</span>(fut), ]</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>This project forecasts the monthly **US Industrial Production Index**</span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>(1990–2025) and tests whether **consumer sentiment** helps to anticipate it. It</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>compares classical time series models on a held-out test period, from data</span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>preparation and statistical testing to model diagnostics and a rolling-origin</span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>backtest.</span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: fig-ip</span></span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a><span class="co">#| fig-cap: "US industrial production, total index (2017 = 100, not seasonally adjusted)"</span></span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a><span class="fu">autoplot</span>(ip_ts) <span class="sc">+</span></span>
+<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">"Index (2017 = 100)"</span>)</span>
+<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a><span class="fu">## Key findings</span></span>
+<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**The series needs transforming before modelling.** Industrial production has</span>
+<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a>  a trend, a strong seasonal pattern and two large shocks (2008–2009 and 2020).</span>
+<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a>  Unit root tests (KPSS, ADF, Phillips-Perron) agree that it is non-stationary;</span>
+<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a>  the HEGY test shows a stochastic trend (p = <span class="in">`r f2(uni$hegy_t1_p)`</span>) but a</span>
+<span id="cb5-57"><a href="#cb5-57" aria-hidden="true" tabindex="-1"></a>  deterministic seasonal pattern (seasonal unit roots rejected, p &lt; 0.01).</span>
+<span id="cb5-58"><a href="#cb5-58" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**No model clearly wins.** With a single forecast origin (June 2016), SARIMA</span>
+<span id="cb5-59"><a href="#cb5-59" aria-hidden="true" tabindex="-1"></a>  looked best (RMSE <span class="in">`r f2(uni$single_origin["SARIMA", "RMSE"])`</span>). A</span>
+<span id="cb5-60"><a href="#cb5-60" aria-hidden="true" tabindex="-1"></a>  rolling-origin evaluation, which re-estimates the models every month, is more</span>
+<span id="cb5-61"><a href="#cb5-61" aria-hidden="true" tabindex="-1"></a>  reliable: SARIMA, ETS and Holt-Winters are statistically tied one month ahead</span>
+<span id="cb5-62"><a href="#cb5-62" aria-hidden="true" tabindex="-1"></a>  (RMSE <span class="in">`r f2(min(cv_rmse_1[stat_models]))`</span>–<span class="in">`r f2(max(cv_rmse_1[stat_models]))`</span>)</span>
+<span id="cb5-63"><a href="#cb5-63" aria-hidden="true" tabindex="-1"></a>  and all significantly beat a seasonal naive benchmark</span>
+<span id="cb5-64"><a href="#cb5-64" aria-hidden="true" tabindex="-1"></a>  (<span class="in">`r f2(cv_rmse_1["Seasonal naive"])`</span>). From about <span class="in">`r naive_lower_from`</span> months</span>
+<span id="cb5-65"><a href="#cb5-65" aria-hidden="true" tabindex="-1"></a>  ahead the seasonal naive forecast has a lower RMSE, but the difference is not</span>
+<span id="cb5-66"><a href="#cb5-66" aria-hidden="true" tabindex="-1"></a>  statistically significant at any horizon (Diebold-Mariano p ≥ <span class="in">`r floor(100 * min(naive_p_after)) / 100`</span>).</span>
+<span id="cb5-67"><a href="#cb5-67" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Consumer sentiment has statistically significant but small predictive</span>
+<span id="cb5-68"><a href="#cb5-68" aria-hidden="true" tabindex="-1"></a>  content.** The two series are not cointegrated. In a VAR with seasonal</span>
+<span id="cb5-69"><a href="#cb5-69" aria-hidden="true" tabindex="-1"></a>  dummies, sentiment Granger-causes industrial production</span>
+<span id="cb5-70"><a href="#cb5-70" aria-hidden="true" tabindex="-1"></a>  (p = <span class="in">`r sprintf("%.3f", mv$granger_umc_p)`</span>) but not the reverse</span>
+<span id="cb5-71"><a href="#cb5-71" aria-hidden="true" tabindex="-1"></a>  (p = <span class="in">`r f2(mv$granger_ipb_p)`</span>), and it explains about</span>
+<span id="cb5-72"><a href="#cb5-72" aria-hidden="true" tabindex="-1"></a>  <span class="in">`r round(100 * mv$fevd_10["IPB_d", "UMCSENT_d"])`</span>% of production's forecast</span>
+<span id="cb5-73"><a href="#cb5-73" aria-hidden="true" tabindex="-1"></a>  variance. A typical sentiment shock (about <span class="in">`r round(mv$shock_size)`</span> points)</span>
+<span id="cb5-74"><a href="#cb5-74" aria-hidden="true" tabindex="-1"></a>  raises the production index by about</span>
+<span id="cb5-75"><a href="#cb5-75" aria-hidden="true" tabindex="-1"></a>  <span class="in">`r f1(min(mv$cum_irf_12))`</span>–<span class="in">`r f1(max(mv$cum_irf_12))`</span> points over a year.</span>
+<span id="cb5-76"><a href="#cb5-76" aria-hidden="true" tabindex="-1"></a>  Adding sentiment to the model **does not improve out-of-sample forecasts**:</span>
+<span id="cb5-77"><a href="#cb5-77" aria-hidden="true" tabindex="-1"></a>  neither the Diebold-Mariano test nor the Clark-West test for nested models</span>
+<span id="cb5-78"><a href="#cb5-78" aria-hidden="true" tabindex="-1"></a>  finds a gain (Clark-West one-sided p between <span class="in">`r f2(min(cw_p))`</span> and</span>
+<span id="cb5-79"><a href="#cb5-79" aria-hidden="true" tabindex="-1"></a>  <span class="in">`r f2(max(cw_p))`</span>).</span>
+<span id="cb5-80"><a href="#cb5-80" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Outlook:** a SARIMA model re-estimated on all data forecasts the index at</span>
+<span id="cb5-81"><a href="#cb5-81" aria-hidden="true" tabindex="-1"></a>  around <span class="in">`r round(min(fut$forecast))`</span>–<span class="in">`r round(max(fut$forecast))`</span></span>
+<span id="cb5-82"><a href="#cb5-82" aria-hidden="true" tabindex="-1"></a>  through <span class="in">`r fut_last$month`</span> (95% interval <span class="in">`r round(fut_last$lower95)`</span>–<span class="in">`r round(fut_last$upper95)`</span>).</span>
+<span id="cb5-83"><a href="#cb5-83" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-86"><a href="#cb5-86" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb5-87"><a href="#cb5-87" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: tbl-summary</span></span>
+<span id="cb5-88"><a href="#cb5-88" aria-hidden="true" tabindex="-1"></a><span class="co">#| tbl-cap: "Rolling-origin RMSE in index points, forecasts made every month from June 2016 to March 2025"</span></span>
+<span id="cb5-89"><a href="#cb5-89" aria-hidden="true" tabindex="-1"></a>summary_models <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"SARIMA"</span>, <span class="st">"ETS"</span>, <span class="st">"Holt-Winters"</span>, <span class="st">"Seasonal naive"</span>)</span>
+<span id="cb5-90"><a href="#cb5-90" aria-hidden="true" tabindex="-1"></a><span class="fu">data.frame</span>(</span>
+<span id="cb5-91"><a href="#cb5-91" aria-hidden="true" tabindex="-1"></a>  <span class="at">Model =</span> <span class="fu">c</span>(<span class="fu">paste0</span>(uni<span class="sc">$</span>sarima_spec, <span class="st">", log"</span>), uni<span class="sc">$</span>ets_spec, <span class="st">"Holt-Winters, additive"</span>,</span>
+<span id="cb5-92"><a href="#cb5-92" aria-hidden="true" tabindex="-1"></a>            <span class="st">"Seasonal naive (benchmark)"</span>),</span>
+<span id="cb5-93"><a href="#cb5-93" aria-hidden="true" tabindex="-1"></a>  <span class="st">`</span><span class="at">1 month ahead</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">f2</span>(cv_rmse_1[summary_models]),</span>
+<span id="cb5-94"><a href="#cb5-94" aria-hidden="true" tabindex="-1"></a>  <span class="st">`</span><span class="at">12 months ahead</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">f2</span>(cv_rmse_12[summary_models]),</span>
+<span id="cb5-95"><a href="#cb5-95" aria-hidden="true" tabindex="-1"></a>  <span class="at">check.names =</span> <span class="cn">FALSE</span></span>
+<span id="cb5-96"><a href="#cb5-96" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb5-97"><a href="#cb5-97" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb5-98"><a href="#cb5-98" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-101"><a href="#cb5-101" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb5-102"><a href="#cb5-102" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: tbl-outlook</span></span>
+<span id="cb5-103"><a href="#cb5-103" aria-hidden="true" tabindex="-1"></a><span class="co">#| tbl-cap: "Industrial production forecast (index, 2017 = 100), SARIMA estimated on January 1990 to April 2025"</span></span>
+<span id="cb5-104"><a href="#cb5-104" aria-hidden="true" tabindex="-1"></a><span class="fu">data.frame</span>(</span>
+<span id="cb5-105"><a href="#cb5-105" aria-hidden="true" tabindex="-1"></a>  <span class="at">Month =</span> fut<span class="sc">$</span>month,</span>
+<span id="cb5-106"><a href="#cb5-106" aria-hidden="true" tabindex="-1"></a>  <span class="st">`</span><span class="at">SARIMA forecast</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">f1</span>(fut<span class="sc">$</span>forecast),</span>
+<span id="cb5-107"><a href="#cb5-107" aria-hidden="true" tabindex="-1"></a>  <span class="st">`</span><span class="at">95% interval</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">paste</span>(<span class="fu">f1</span>(fut<span class="sc">$</span>lower95), <span class="st">"–"</span>, <span class="fu">f1</span>(fut<span class="sc">$</span>upper95)),</span>
+<span id="cb5-108"><a href="#cb5-108" aria-hidden="true" tabindex="-1"></a>  <span class="at">check.names =</span> <span class="cn">FALSE</span></span>
+<span id="cb5-109"><a href="#cb5-109" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb5-110"><a href="#cb5-110" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb5-111"><a href="#cb5-111" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-112"><a href="#cb5-112" aria-hidden="true" tabindex="-1"></a>**Takeaway:** one month ahead, any of the three statistical models clearly</span>
+<span id="cb5-113"><a href="#cb5-113" aria-hidden="true" tabindex="-1"></a>beats a naive benchmark; from about <span class="in">`r naive_lower_from`</span> months ahead a naive</span>
+<span id="cb5-114"><a href="#cb5-114" aria-hidden="true" tabindex="-1"></a>seasonal forecast has lower errors, although not significantly, so the models</span>
+<span id="cb5-115"><a href="#cb5-115" aria-hidden="true" tabindex="-1"></a>add clear value only at the shortest horizon. Consumer sentiment helps at the</span>
+<span id="cb5-116"><a href="#cb5-116" aria-hidden="true" tabindex="-1"></a>margin in sample, but not enough to improve forecasts.</span>
+<span id="cb5-117"><a href="#cb5-117" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-118"><a href="#cb5-118" aria-hidden="true" tabindex="-1"></a><span class="fu">## Limitations</span></span>
+<span id="cb5-119"><a href="#cb5-119" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-120"><a href="#cb5-120" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Prediction intervals are probably too narrow in crises.** Model residuals</span>
+<span id="cb5-121"><a href="#cb5-121" aria-hidden="true" tabindex="-1"></a>  show ARCH effects (volatility clustering) and heavy tails, while the</span>
+<span id="cb5-122"><a href="#cb5-122" aria-hidden="true" tabindex="-1"></a>  intervals assume constant, normal errors.</span>
+<span id="cb5-123"><a href="#cb5-123" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**The pandemic dominates the errors.** A few months in 2020 produce the</span>
+<span id="cb5-124"><a href="#cb5-124" aria-hidden="true" tabindex="-1"></a>  largest forecast errors; results excluding them are reported as a robustness</span>
+<span id="cb5-125"><a href="#cb5-125" aria-hidden="true" tabindex="-1"></a>  check, and the main conclusions do not change.</span>
+<span id="cb5-126"><a href="#cb5-126" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Revised data, not real-time data.** The backtest uses the data as revised</span>
+<span id="cb5-127"><a href="#cb5-127" aria-hidden="true" tabindex="-1"></a>  by December 2025, not the figures available to a forecaster at each date.</span>
+<span id="cb5-128"><a href="#cb5-128" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**One series and one sample.** The conclusions apply to this index and this</span>
+<span id="cb5-129"><a href="#cb5-129" aria-hidden="true" tabindex="-1"></a>  period.</span>
+<span id="cb5-130"><a href="#cb5-130" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Seasonal differencing is a modelling choice.** The HEGY test points to</span>
+<span id="cb5-131"><a href="#cb5-131" aria-hidden="true" tabindex="-1"></a>  deterministic seasonality; a model with a first difference and monthly</span>
+<span id="cb5-132"><a href="#cb5-132" aria-hidden="true" tabindex="-1"></a>  dummies was not tested as a forecasting alternative to SARIMA.</span>
+<span id="cb5-133"><a href="#cb5-133" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-134"><a href="#cb5-134" aria-hidden="true" tabindex="-1"></a><span class="fu">## How the analysis is organised</span></span>
+<span id="cb5-135"><a href="#cb5-135" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-136"><a href="#cb5-136" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span><span class="co">[</span><span class="ot">**Univariate models**</span><span class="co">](univariate.qmd)</span>: visual analysis, stationarity and</span>
+<span id="cb5-137"><a href="#cb5-137" aria-hidden="true" tabindex="-1"></a>  seasonality tests, ARMA, SARIMA, ETS, Holt-Winters, a seasonal naive</span>
+<span id="cb5-138"><a href="#cb5-138" aria-hidden="true" tabindex="-1"></a>  benchmark, residual diagnostics, single-origin and rolling-origin</span>
+<span id="cb5-139"><a href="#cb5-139" aria-hidden="true" tabindex="-1"></a>  evaluation, and the forecast to 2028.</span>
+<span id="cb5-140"><a href="#cb5-140" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span><span class="co">[</span><span class="ot">**VAR analysis**</span><span class="co">](multivariate.qmd)</span>: consumer sentiment, Johansen</span>
+<span id="cb5-141"><a href="#cb5-141" aria-hidden="true" tabindex="-1"></a>  cointegration test, VAR with seasonal dummies, Granger causality, impulse</span>
+<span id="cb5-142"><a href="#cb5-142" aria-hidden="true" tabindex="-1"></a>  responses, variance decomposition, an out-of-sample test of the value of</span>
+<span id="cb5-143"><a href="#cb5-143" aria-hidden="true" tabindex="-1"></a>  sentiment (Diebold-Mariano and Clark-West) and a 24-month forecast.</span>
+<span id="cb5-144"><a href="#cb5-144" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-145"><a href="#cb5-145" aria-hidden="true" tabindex="-1"></a><span class="fu">## Data</span></span>
+<span id="cb5-146"><a href="#cb5-146" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-147"><a href="#cb5-147" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Series <span class="pp">|</span> Description <span class="pp">|</span> Source <span class="pp">|</span></span>
+<span id="cb5-148"><a href="#cb5-148" aria-hidden="true" tabindex="-1"></a><span class="pp">|---|---|---|</span></span>
+<span id="cb5-149"><a href="#cb5-149" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> IPB50001N <span class="pp">|</span> Industrial Production: Total Index, 2017 = 100, not seasonally adjusted <span class="pp">|</span> Board of Governors of the Federal Reserve System, via FRED <span class="pp">|</span></span>
+<span id="cb5-150"><a href="#cb5-150" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> UMCSENT <span class="pp">|</span> University of Michigan: Consumer Sentiment, 1966:Q1 = 100 <span class="pp">|</span> Surveys of Consumers, University of Michigan, via FRED <span class="pp">|</span></span>
+<span id="cb5-151"><a href="#cb5-151" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-152"><a href="#cb5-152" aria-hidden="true" tabindex="-1"></a>Monthly data from January 1990 to April 2025 (<span class="in">`r uni$n_obs`</span> observations),</span>
+<span id="cb5-153"><a href="#cb5-153" aria-hidden="true" tabindex="-1"></a>retrieved from ALFRED using the vintage of 17 December 2025 so that the results</span>
+<span id="cb5-154"><a href="#cb5-154" aria-hidden="true" tabindex="-1"></a>can be reproduced exactly. See the</span>
+<span id="cb5-155"><a href="#cb5-155" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">data notes</span><span class="co">](https://github.com/xwmara/us-industrial-production-forecast/tree/main/data)</span></span>
+<span id="cb5-156"><a href="#cb5-156" aria-hidden="true" tabindex="-1"></a>for citations and terms of use.</span>
+<span id="cb5-157"><a href="#cb5-157" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-158"><a href="#cb5-158" aria-hidden="true" tabindex="-1"></a><span class="fu">## Tools</span></span>
+<span id="cb5-159"><a href="#cb5-159" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-160"><a href="#cb5-160" aria-hidden="true" tabindex="-1"></a>R (forecast, urca, tseries, uroot, lmtest, FinTS, vars, sandwich), Quarto for</span>
+<span id="cb5-161"><a href="#cb5-161" aria-hidden="true" tabindex="-1"></a>the report and renv for package versions.</span>
+<span id="cb5-162"><a href="#cb5-162" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-163"><a href="#cb5-163" aria-hidden="true" tabindex="-1"></a><span class="fu">## About</span></span>
+<span id="cb5-164"><a href="#cb5-164" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-165"><a href="#cb5-165" aria-hidden="true" tabindex="-1"></a>This is a portfolio adaptation of a team project for the Time Series course at</span>
+<span id="cb5-166"><a href="#cb5-166" aria-hidden="true" tabindex="-1"></a>the Bucharest University of Economic Studies (2025). The analysis was reviewed</span>
+<span id="cb5-167"><a href="#cb5-167" aria-hidden="true" tabindex="-1"></a>and extended for this version: the forecast evaluation, the VAR specification</span>
+<span id="cb5-168"><a href="#cb5-168" aria-hidden="true" tabindex="-1"></a>and several tests were corrected, and an out-of-sample test of consumer</span>
+<span id="cb5-169"><a href="#cb5-169" aria-hidden="true" tabindex="-1"></a>sentiment was added. See the</span>
+<span id="cb5-170"><a href="#cb5-170" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">README</span><span class="co">](https://github.com/xwmara/us-industrial-production-forecast#credits)</span></span>
+<span id="cb5-171"><a href="#cb5-171" aria-hidden="true" tabindex="-1"></a>for credits.</span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->

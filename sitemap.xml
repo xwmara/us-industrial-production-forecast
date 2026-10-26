@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://xwmara.github.io/us-industrial-production-forecast/multivariate.html</loc>
-    <lastmod>2026-10-26T20:48:28.744Z</lastmod>
-  </url>
-  <url>
     <loc>https://xwmara.github.io/us-industrial-production-forecast/index.html</loc>
-    <lastmod>2026-10-26T20:51:48.055Z</lastmod>
+    <lastmod>2026-10-26T21:19:06.873Z</lastmod>
   </url>
   <url>
     <loc>https://xwmara.github.io/us-industrial-production-forecast/univariate.html</loc>
-    <lastmod>2026-10-26T20:48:27.913Z</lastmod>
+    <lastmod>2026-10-26T21:13:59.006Z</lastmod>
+  </url>
+  <url>
+    <loc>https://xwmara.github.io/us-industrial-production-forecast/multivariate.html</loc>
+    <lastmod>2026-10-26T21:13:59.033Z</lastmod>
   </url>
 </urlset>
