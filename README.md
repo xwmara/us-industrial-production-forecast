@@ -14,15 +14,17 @@ published as a Quarto website.
 - **No model clearly wins.** In a rolling-origin backtest (models re-estimated
   every month from June 2016 to March 2025), SARIMA, ETS and Holt-Winters are
   statistically tied one month ahead (RMSE about 2.0 index points) and all
-  beat a seasonal naive benchmark (4.1). From about four months ahead, the
-  seasonal naive forecast is as accurate as any model.
+  significantly beat a seasonal naive benchmark (4.1). From about four months
+  ahead the seasonal naive forecast has a lower RMSE, but the difference is not
+  statistically significant.
 - **A single forecast origin is misleading.** Evaluated from one origin only,
   SARIMA looked far better than ETS and Holt-Winters; the backtest does not
   confirm it.
 - **Consumer sentiment is a significant but weak predictor.** It
   Granger-causes industrial production (p = 0.003) and explains about 5% of its
   forecast variance, but adding it to the model does not improve
-  out-of-sample forecasts.
+  out-of-sample forecasts (neither the Diebold-Mariano test nor the
+  Clark-West test for nested models finds a gain).
 - **Outlook:** around 100–102 index points through April 2028 (95% interval
   84–120).
 
@@ -34,7 +36,7 @@ published as a Quarto website.
 | Statistical testing | KPSS, ADF, Phillips-Perron, HEGY, Ljung-Box, Jarque-Bera, ARCH |
 | Univariate models | ARMA, SARIMA, ETS, Holt-Winters, seasonal naive benchmark |
 | Forecast evaluation | single-origin and rolling-origin (expanding window) backtests, RMSE / MAE / MAPE, Diebold-Mariano tests, robustness check without the pandemic |
-| Multivariate models | Johansen cointegration test, VAR with seasonal dummies, Granger causality, impulse responses, variance decomposition, out-of-sample value of sentiment |
+| Multivariate models | Johansen cointegration test, VAR with seasonal dummies, Granger causality, impulse responses, variance decomposition, out-of-sample value of sentiment (Diebold-Mariano and Clark-West tests) |
 
 ## From course project to portfolio
 
@@ -65,6 +67,7 @@ exactly.
 │   ├── setup.R          # shared packages and data loading
 │   └── get_data.R       # downloads the data (fixed ALFRED vintage)
 ├── data/                # industrial production CSV and data notes
+├── results/             # key results saved by the analysis pages, read by index.qmd
 ├── _freeze/             # stored computation results used to build the site
 ├── _quarto.yml          # website configuration
 └── renv.lock            # exact R package versions
