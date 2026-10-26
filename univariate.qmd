@@ -382,8 +382,9 @@ autoplot(sarima_real) +
    `r round(sarima_mean_rmse, 2)` instead of
    `r round(accuracy(sarima_real$mean, ip_test)[1, "RMSE"], 2)`. The median is
    used as the point forecast.
-2. The forecast (blue) follows the centre of the test data (2016–2025) closely,
-   which indicates good out-of-sample performance.
+2. The forecast (blue) follows the centre of the test data (2016–2025) closely
+   from this single origin; the rolling-origin evaluation below gives a more
+   complete picture of out-of-sample performance.
 3. The 2020 COVID-19 shock appears as a large exogenous deviation; the data
    later return to the forecast path.
 4. The uncertainty fan widens asymmetrically, as expected for long-horizon
@@ -408,7 +409,9 @@ additive damped trend (φ = `r round(ets_auto$par["phi"], 4)`) and multiplicativ
 seasonality. The Ljung-Box test gives p `r fmt_p(ets_lb$p.value)` (< 0.05),
 so the residuals are not white noise, and the ACF shows remaining
 autocorrelation at short and seasonal lags (12, 24). In-sample, ETS leaves
-information in the residuals and is inferior to SARIMA in this respect.
+information in the residuals and is inferior to SARIMA in this respect,
+although out of sample the two models perform similarly (see the
+rolling-origin evaluation).
 
 ```{r}
 #| label: fig-ets-forecast
@@ -466,7 +469,8 @@ hw_lb <- checkresiduals(hw_add)
 The Ljung-Box test gives p `r fmt_p(hw_lb$p.value)` (< 0.05): the residuals are
 not white noise, with large dependencies at the seasonal lags (12, 24, 36).
 Holt-Winters makes the seasonal component too rigid and does not remove the
-seasonal memory of the index; in-sample it is clearly inferior to SARIMA.
+seasonal memory of the index; on in-sample residual diagnostics it is inferior
+to SARIMA.
 
 ## Seasonal naive benchmark
 

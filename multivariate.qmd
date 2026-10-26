@@ -411,8 +411,9 @@ rbind(
    effect is statistically significant but economically small: the index is
    around 100, so this is roughly half a percent.
 
-This supports the view of sentiment indicators as leading indicators of real
-industrial activity.
+Consumer sentiment therefore leads industrial production by about one month,
+but the effect is small; the out-of-sample test below checks whether it is
+large enough to improve forecasts.
 
 ## Forecast error variance decomposition
 
